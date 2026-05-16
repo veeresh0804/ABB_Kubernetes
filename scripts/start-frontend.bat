@@ -1,0 +1,9 @@
+@echo off
+cd /d "%~dp0..\frontend"
+echo [KubeMind AI] Starting frontend...
+echo [KubeMind AI] Installing Node dependencies...
+call npm install --silent
+echo.
+echo [KubeMind AI] Starting Vite dev server on port 5173...
+start "" http://localhost:5173
+npm run dev
