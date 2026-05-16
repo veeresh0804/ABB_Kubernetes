@@ -74,6 +74,9 @@ def process(
     if any(kw in q for kw in ["depend", "relationship", "connect", "talk", "communicate"]):
         return _answer_dependencies(q, metrics)
 
+    if any(kw in q for kw in ["edge", "factory", "industrial", "abb", "scada", "ot"]):
+        return _answer_industrial(q, metrics, anomalies)
+
     return _answer_generic(q, metrics, anomalies, correlations)
 
 
@@ -451,6 +454,24 @@ def _answer_dependencies(q, metrics):
         "sources": ["dependency-engine"],
         "severity": "INFO",
         "confidence": 0.99,
+    }
+
+
+def _answer_industrial(q, metrics, anomalies):
+    score = _health_score(metrics)
+    return {
+        "answer": (
+            f"**KubeMind AI is optimized for industrial edge deployments.**\n\n"
+            f"Current edge cluster health: **{score}/100**. "
+            f"The platform supports Minikube, K3s, and MicroK8s — the lightweight "
+            f"orchestrators used in factory-floor and SCADA-adjacent environments. "
+            f"With {len(anomalies)} active anomalies being tracked, the AI agents "
+            f"are providing continuous operational intelligence with no cloud dependency. "
+            f"All analysis runs locally — critical for OT network isolation requirements."
+        ),
+        "sources": ["cluster-wide", "edge-config"],
+        "severity": "INFO" if score > 80 else "WARNING",
+        "confidence": 0.95,
     }
 
 
