@@ -18,12 +18,21 @@ const SEVERITY_COLORS: Record<string, string> = {
   INFO: '#64748B',
 };
 
+const ACTION_TEXT: Record<string, string> = {
+  CRITICAL: 'Scale or audit code',
+  WARNING: 'Add circuit breaker',
+  INFO: 'No action required',
+};
+
 const badgeCls = (s: string) => s === 'CRITICAL' ? 'badge-alert' : s === 'WARNING' ? 'badge-warning' : 'badge-ok';
-const cardBorder = (s: string) => s === 'CRITICAL' ? 'alert-state' : s === 'WARNING' ? 'warn-state' : '';
+const cardBorder = (s: string) => s === 'CRITICAL' ? 'alert-state' : s === 'WARNING' ? 'warn-state' : 'info-state';
+const actionCls = (s: string) => s === 'CRITICAL' ? 'alert' : s === 'WARNING' ? 'warn' : 'ok';
+const confBarCls = (pct: number) => pct > 80 ? 'high' : pct > 60 ? 'med' : 'low';
 
 const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a: any; onRemediate: (agent: any) => void; acting: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const sevColor = SEVERITY_COLORS[a.status] || '#64748B';
+  const pct = (a.confidence * 100).toFixed(0);
 
   return (
     <div className={`agent-card ${cardBorder(a.status)}`}>
@@ -35,10 +44,11 @@ const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a:
           <div className="agent-status-text">{a.domain}</div>
         </div>
       </div>
-      <div className="agent-insight">"{a.finding}"</div>
+      <div className="agent-insight" style={{ color: a.status === 'CRITICAL' ? 'var(--km-danger)' : a.status === 'WARNING' ? 'var(--km-warn)' : 'var(--km-secondary)' }}>"{a.finding}"</div>
       <div className="agent-meta">
-        <span>Confidence: {(a.confidence * 100).toFixed(0)}%</span>
-        {a.recommendation && <span>Rec: {a.recommendation.slice(0, 40)}...</span>}
+        <div className="conf-bar-wrap"><div className={`conf-bar ${confBarCls(a.confidence * 100)}`} style={{ width: `${pct}%` }} /></div>
+        <span className="conf-val">{pct}%</span>
+        <span className={`agent-action ${actionCls(a.status)}`}>{ACTION_TEXT[a.status] || 'Monitoring'}</span>
       </div>
       {a.reasoning?.length > 0 && (
         <div style={{ marginTop: 8, borderTop: '1px solid var(--km-border)', paddingTop: 8 }}>
@@ -59,7 +69,7 @@ const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a:
       )}
       {a.buffer_action && a.buffer_action !== "monitor_only" && (
         <button className="btn-primary" disabled={acting} onClick={() => onRemediate(a)}
-          style={{ width: '100%', marginTop: 10, fontSize: 9, padding: '5px 0', justifyContent: 'center', letterSpacing: 0.3 }}>
+          style={{ width: '100%', marginTop: 10, fontSize: 9, padding: '5px 0', justifyContent: 'center', letterSpacing: 0.3, background: a.status === 'CRITICAL' ? 'var(--km-danger)' : 'var(--km-accent)' }}>
           {acting ? <Activity size={10} className="spin" /> : <Play size={10} />} EXECUTE: {a.buffer_action.replace(/_/g, ' ').toUpperCase()}
         </button>
       )}

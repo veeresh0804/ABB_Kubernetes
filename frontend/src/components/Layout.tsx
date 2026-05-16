@@ -65,6 +65,38 @@ export function Layout({
 
   const uptimeStr = 'Active';
 
+  function HealthRing({ score }: { score: number }) {
+    const r = 14;
+    const circ = 2 * Math.PI * r;
+    const fill = circ * (score / 100);
+    const color = score > 80 ? 'var(--km-healthy)' : score > 50 ? 'var(--km-warn)' : 'var(--km-danger)';
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <svg width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r={r} fill="none" stroke="var(--km-border)" strokeWidth="2.5"/>
+          <circle
+            cx="18" cy="18" r={r} fill="none"
+            stroke={color} strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={`${fill} ${circ}`}
+            transform="rotate(-90 18 18)"
+            style={{ transition: 'stroke-dasharray 0.8s ease, stroke 0.4s ease' }}
+          />
+          <text x="18" y="22" textAnchor="middle"
+            style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', fontWeight: 700, fill: color }}>
+            {score}
+          </text>
+        </svg>
+        <div>
+          <div style={{ fontFamily: 'var(--km-mono)', fontSize: '9px', color: 'var(--km-dim)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Health</div>
+          <div style={{ fontFamily: 'var(--km-mono)', fontSize: '11px', fontWeight: 600, color }}>
+            {score > 80 ? 'NOMINAL' : score > 50 ? 'DEGRADED' : 'CRITICAL'}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-layout ${mood}`}>
       {/* TOP GLOBAL STATUS BAR */}
@@ -76,17 +108,17 @@ export function Layout({
               <path d="M8 3l4 2.67V10L8 13l-4-2.33V5.67L8 3z" fill="rgba(255,255,255,0.3)"/>
             </svg>
           </div>
-          KubeMind AI
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--km-text)', letterSpacing: '-0.3px' }}>KubeMind AI</div>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--km-dim)', letterSpacing: '0.5px', fontFamily: 'var(--km-mono)' }}>AI OPERATIONS</div>
+          </div>
         </div>
         <div className="topbar-divider" />
         <div className="topbar-stat">
           <span className="topbar-stat-dot" style={{ background: statusColor, boxShadow: `0 0 4px ${statusColor}` }} />
           <span className="topbar-stat-value" style={{ color: statusColor }}>{modeLabel}</span>
         </div>
-        <div className="topbar-stat">
-          Health
-          <span className="topbar-stat-value">{state.health.score}%</span>
-        </div>
+        <HealthRing score={state.health.score} />
         <div className="topbar-stat">
           <AlertTriangle size={10} />
           <span className="topbar-stat-value">{state.health.critical_count + state.health.warning_count}</span>
