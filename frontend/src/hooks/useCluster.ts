@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { applyTransition } from './useConnectionState';
+import { useEventLog } from './useEventLog';
 
 /* ─── Types ─── */
 export interface PodMetric {
@@ -172,26 +174,12 @@ function fallbackTick(prev: ClusterState): ClusterState {
   };
 }
 
-/* ─── State machine helpers (ref-based, no React re-render dependency) ─── */
-const MODE_TRANSITIONS: Record<ConnectionMode, Partial<Record<string, ConnectionMode>>> = {
-  BOOTING:     { HEALTH_OK: 'CONNECTING', HEALTH_FAIL: 'BOOTING', FORCE_SIM: 'SIMULATION' },
-  CONNECTING:  { WS_OPEN: 'LIVE', WS_CLOSED: 'DEGRADED', WS_ERROR: 'DEGRADED', HEALTH_FAIL: 'DEGRADED', FORCE_SIM: 'SIMULATION' },
-  LIVE:        { WS_CLOSED: 'DEGRADED', WS_ERROR: 'DEGRADED', HEARTBEAT_STALE: 'DEGRADED' },
-  DEGRADED:    { WS_OPEN: 'LIVE', HEALTH_FAIL: 'SIMULATION', FORCE_SIM: 'SIMULATION' },
-  SIMULATION:  { RECOVERY_OK: 'RECONNECTING' },
-  RECONNECTING: { WS_OPEN: 'LIVE', WS_CLOSED: 'SIMULATION', WS_ERROR: 'SIMULATION', HEALTH_FAIL: 'SIMULATION' },
-};
-
-function applyTransition(from: ConnectionMode, event: string): ConnectionMode | null {
-  return MODE_TRANSITIONS[from]?.[event] ?? null;
-}
-
 /* ─── Hook ─── */
 export function useCluster() {
   const [state, setState] = useState<ClusterState>(EMPTY);
   const [mode, setMode] = useState<ConnectionMode>('BOOTING');
   const [dataSource, setDataSource] = useState<'live' | 'simulated'>('simulated');
-  const [events, setEvents] = useState<ConnectionEvent[]>([]);
+  const { events, addEvent } = useEventLog();
 
   /* ── Refs ── */
   const modeRef = useRef<ConnectionMode>('BOOTING');
@@ -201,8 +189,6 @@ export function useCluster() {
   const lastLiveUpdateRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const healthFailCountRef = useRef(0);
-  const eventsRef = useRef<ConnectionEvent[]>([]);
-  let nextEventId = useRef(0);
 
   /* Timer refs */
   const simTimerRef = useRef<number | undefined>(undefined);
@@ -210,14 +196,6 @@ export function useCluster() {
   const hbTimerRef = useRef<number | undefined>(undefined);
   const pingTimerRef = useRef<number | undefined>(undefined);
   const wsConnectTimerRef = useRef<number | undefined>(undefined);
-
-  /* ── Event helper ── */
-  const pushEvent = useCallback((type: ConnectionEvent['type'], message: string) => {
-    const ev: ConnectionEvent = { id: nextEventId.current++, timestamp: Date.now(), type, message };
-    const next = [...eventsRef.current, ev].slice(-50);
-    eventsRef.current = next;
-    setEvents(next);
-  }, []);
 
   /* ── Simulation engine (always running in background) ── */
   const stopSim = useCallback(() => {
@@ -263,7 +241,7 @@ export function useCluster() {
       }
       if (modeRef.current === 'LIVE') {
         setDataSource('live');
-        pushEvent('success', 'WebSocket connected — live telemetry active');
+        addEvent('success', 'WebSocket connected — live telemetry active');
       }
       pingTimerRef.current = window.setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -303,10 +281,10 @@ export function useCluster() {
         setMode(next);
       }
       if (next === 'DEGRADED') {
-        pushEvent('warning', 'WebSocket disconnected — attempting reconnect');
+        addEvent('warning', 'WebSocket disconnected — attempting reconnect');
         setDataSource('simulated');
       } else if (next === 'SIMULATION') {
-        pushEvent('warning', 'Backend unreachable — simulation mode activated');
+        addEvent('warning', 'Backend unreachable — simulation mode activated');
         setDataSource('simulated');
       }
       // Schedule reconnect
@@ -317,7 +295,7 @@ export function useCluster() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [pushEvent]);
+  }, [addEvent]);
 
   /* ── Health check ── */
   const runHealthCheck = useCallback(async () => {
@@ -330,7 +308,7 @@ export function useCluster() {
 
       const m = modeRef.current;
       if (m === 'BOOTING') {
-        pushEvent('info', 'Backend detected — establishing WebSocket link');
+        addEvent('info', 'Backend detected — establishing WebSocket link');
         const next = applyTransition(m, 'HEALTH_OK');
         if (next) {
           modeRef.current = next;
@@ -342,7 +320,7 @@ export function useCluster() {
         }
         connectWS();
       } else if (m === 'SIMULATION') {
-        pushEvent('info', 'Backend restored — reconnecting telemetry');
+        addEvent('info', 'Backend restored — reconnecting telemetry');
         const next = applyTransition(m, 'RECOVERY_OK');
         if (next) {
           modeRef.current = next;
@@ -370,7 +348,7 @@ export function useCluster() {
       if (m === 'BOOTING' && fails >= BOOT_FAIL_THRESHOLD) {
         const next = applyTransition(m, 'FORCE_SIM');
         if (next) {
-          pushEvent('info', 'Starting simulation mode with fallback telemetry');
+          addEvent('info', 'Starting simulation mode with fallback telemetry');
           modeRef.current = next;
           setMode(next);
           setDataSource('simulated');
@@ -382,7 +360,7 @@ export function useCluster() {
       } else if ((m === 'DEGRADED' || m === 'RECONNECTING') && fails >= 1) {
         const next = applyTransition(m, 'HEALTH_FAIL');
         if (next) {
-          pushEvent('warning', 'Backend unreachable — running simulated telemetry');
+          addEvent('warning', 'Backend unreachable — running simulated telemetry');
           modeRef.current = next;
           setMode(next);
           setDataSource('simulated');
@@ -398,7 +376,7 @@ export function useCluster() {
         }));
       }
     }
-  }, [connectWS, pushEvent]);
+  }, [connectWS, addEvent]);
 
   /* ── Health poll lifecycle ── */
   const startHealthPoll = useCallback((intervalMs: number) => {
@@ -422,7 +400,7 @@ export function useCluster() {
       if (modeRef.current !== 'LIVE') return;
       const elapsed = Date.now() - lastLiveUpdateRef.current;
       if (elapsed > HEARTBEAT_STALE_MS) {
-        pushEvent('warning', 'Telemetry heartbeat timeout — WebSocket appears stale');
+        addEvent('warning', 'Telemetry heartbeat timeout — WebSocket appears stale');
         const next = applyTransition('LIVE', 'HEARTBEAT_STALE');
         if (next) {
           modeRef.current = next;
@@ -436,7 +414,7 @@ export function useCluster() {
         }
       }
     }, HEARTBEAT_CHECK_MS);
-  }, [pushEvent]);
+  }, [addEvent]);
 
   const stopHeartbeatMonitor = useCallback(() => {
     if (hbTimerRef.current !== undefined) {

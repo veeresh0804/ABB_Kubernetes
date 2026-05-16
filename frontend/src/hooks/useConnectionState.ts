@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 
 export type ConnectionMode =
   | 'BOOTING'
@@ -8,7 +8,7 @@ export type ConnectionMode =
   | 'SIMULATION'
   | 'RECONNECTING';
 
-type Transition =
+export type TransitionEvent =
   | 'HEALTH_OK'
   | 'HEALTH_FAIL'
   | 'WS_OPEN'
@@ -16,20 +16,20 @@ type Transition =
   | 'WS_ERROR'
   | 'HEARTBEAT_STALE'
   | 'RECOVERY_OK'
-  | 'FORCE_SIMULATION';
+  | 'FORCE_SIM';
 
-const TRANSITIONS: Record<ConnectionMode, Partial<Record<Transition, ConnectionMode>>> = {
+export const MODE_TRANSITIONS: Record<ConnectionMode, Partial<Record<TransitionEvent, ConnectionMode>>> = {
   BOOTING: {
     HEALTH_OK: 'CONNECTING',
     HEALTH_FAIL: 'BOOTING',
-    FORCE_SIMULATION: 'SIMULATION',
+    FORCE_SIM: 'SIMULATION',
   },
   CONNECTING: {
     WS_OPEN: 'LIVE',
     WS_CLOSED: 'DEGRADED',
     WS_ERROR: 'DEGRADED',
     HEALTH_FAIL: 'DEGRADED',
-    FORCE_SIMULATION: 'SIMULATION',
+    FORCE_SIM: 'SIMULATION',
   },
   LIVE: {
     WS_CLOSED: 'DEGRADED',
@@ -39,7 +39,7 @@ const TRANSITIONS: Record<ConnectionMode, Partial<Record<Transition, ConnectionM
   DEGRADED: {
     WS_OPEN: 'LIVE',
     HEALTH_FAIL: 'SIMULATION',
-    FORCE_SIMULATION: 'SIMULATION',
+    FORCE_SIM: 'SIMULATION',
   },
   SIMULATION: {
     RECOVERY_OK: 'RECONNECTING',
@@ -52,24 +52,25 @@ const TRANSITIONS: Record<ConnectionMode, Partial<Record<Transition, ConnectionM
   },
 };
 
+export function applyTransition(from: ConnectionMode, event: TransitionEvent): ConnectionMode | null {
+  return MODE_TRANSITIONS[from]?.[event] ?? null;
+}
+
 export function useConnectionState() {
   const [mode, setMode] = useState<ConnectionMode>('BOOTING');
-  const prevRef = useRef<ConnectionMode>('BOOTING');
 
-  const transition = useCallback((t: Transition): ConnectionMode => {
-    const next = TRANSITIONS[mode][t];
+  const transition = useCallback((t: TransitionEvent): ConnectionMode | null => {
+    const next = applyTransition(mode, t);
     if (next) {
-      prevRef.current = mode;
       setMode(next);
       return next;
     }
-    return mode;
+    return null;
   }, [mode]);
 
   const reset = useCallback(() => {
-    prevRef.current = 'BOOTING';
     setMode('BOOTING');
   }, []);
 
-  return { mode, prevMode: prevRef.current, transition, reset };
+  return { mode, transition, reset };
 }

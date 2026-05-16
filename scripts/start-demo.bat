@@ -1,7 +1,7 @@
 @echo off
 echo ╔══════════════════════════════════════════════╗
 echo ║         KubeMind AI — Demo Launcher          ║
-║      Kubernetes Operations Intelligence       ║
+echo ║      Kubernetes Operations Intelligence       ║
 ╚══════════════════════════════════════════════╝
 echo.
 echo [1/4] Installing backend dependencies...
@@ -39,13 +39,13 @@ echo       ✓ Frontend starting on http://localhost:5173
 echo.
 echo ╔══════════════════════════════════════════════╗
 echo ║        KubeMind AI is now running!           ║
-║                                                ║
-║     Frontend:  http://localhost:5173            ║
-║     Backend:   http://localhost:8000            ║
-║     Health:    http://localhost:8000/api/health ║
-║                                                ║
-║     Close this window to stop the servers.      ║
-╚══════════════════════════════════════════════╝
+echo ║                                                ║
+echo ║     Frontend:  http://localhost:5173            ║
+echo ║     Backend:   http://localhost:8000            ║
+echo ║     Health:    http://localhost:8000/api/health ║
+echo ║                                                ║
+echo ║     Close this window to stop the servers.      ║
+echo ╚══════════════════════════════════════════════╝
 echo.
 echo Press any key to stop all servers...
 pause >nul

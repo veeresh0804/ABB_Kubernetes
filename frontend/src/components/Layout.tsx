@@ -63,7 +63,7 @@ export function Layout({
     ? Math.round(state.agents.reduce((s, a) => s + a.confidence, 0) / state.agents.length * 100)
     : 0;
 
-  const uptimeStr = '12d 4h';
+  const uptimeStr = 'Active';
 
   return (
     <div className={`app-layout ${mood}`}>
