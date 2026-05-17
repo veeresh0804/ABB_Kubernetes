@@ -1,200 +1,128 @@
-# KubeMind AI
+# KubeMind AI: Autonomous Infrastructure Cognition Platform
 
-**Kubernetes Operations Intelligence Platform** — Real-time AI-assisted Kubernetes monitoring, diagnostics, and incident response.
+**KubeMind AI** is a next-generation, AI-native operational intelligence fabric designed to transform Kubernetes observability into autonomous infrastructure cognition. It moves beyond traditional monitoring by implementing a distributed cognitive architecture that reasons, simulates, and self-corrects in real-time.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Status](https://img.shields.io/badge/status-operational-green)
-
----
-
-## Features
-
-- **Real-time Telemetry Dashboard** — Live CPU, memory, network, and latency metrics with streaming updates
-- **Infrastructure Topology Graph** — Force-directed dependency visualization with health status overlays
-- **AI Diagnostic Console** — 7 specialized AI agents (CPU, Memory, PVC, Retry, SRE, Stabilization, Dependency Impact)
-- **Incident Detection & Correlation** — Automatic anomaly detection with blast radius analysis
-- **Operational Timeline** — Streaming event log with severity classification
-- **Connection Health Monitoring** — Live backend, WebSocket, Prometheus, and Kubernetes status
-- **Simulation Fallback** — Self-contained browser-side simulator ensures dashboard never appears broken
-- **Dark/Light Theme** — Industrial dark theme and clean light theme with smooth transitions
+![Version](https://img.shields.io/badge/version-2.0.0-blue) ![Status](https://img.shields.io/badge/category-Operational_Cognition-purple) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
-## Tech Stack
+## 🧠 Strategic Architectural Vision
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, TypeScript, Vite, ECharts, Lucide Icons |
-| **Backend** | Python, FastAPI, WebSockets, Uvicorn |
-| **AI Engine** | Custom agent framework with 7 diagnostic agents |
-| **Simulator** | Backend + browser-side fallback simulation |
-| **Storage** | In-memory metric store with SQLite persistence |
+KubeMind AI has evolved from a monitoring dashboard into a **Distributed Cognitive Operating System** for infrastructure. The platform functions as a unified "World Model" of the cluster, capable of distinguishing causal root causes from symptoms and evaluating stabilization strategies in a virtual sandbox.
+
+### **Core Intelligent Layers**
+
+| Layer | Component | Function |
+|-------|-----------|----------|
+| **Foundation** | **Event-Driven Fabric** | An asynchronous nervous system using a central Event Bus and decoupled workers. |
+| **State** | **Operational State Engine** | The centralized "Single Source of Truth" that maintains global operational context. |
+| **Cortex** | **Cognitive AI Mesh** | A distributed multi-agent system of specialized sensors and domain experts. |
+| **Context** | **Operational Knowledge Graph** | Topology-aware reasoning that understands service relationships and blast radius. |
+| **Memory** | **Hybrid Operational Memory** | Persistent semantic storage for anomaly fingerprints and historical reasoning. |
+| **Foresight**| **Predictive Intelligence** | Multi-horizon forecasting (Immediate, Short-term, Long-term) with temporal smoothing. |
+| **Sandbox** | **Digital Operational Twin** | High-fidelity simulation supporting counterfactual "What-if" reasoning. |
+| **Governance**| **Cognitive Governance** | Forensic audit trails, decision versioning, and recursive learning via a Truth Observer. |
 
 ---
 
-## Quick Start
+## ✨ Key Cognitive Features
 
-### Prerequisites
+### 🔍 **Topology-Aware Causal Inference**
+Unlike simple correlation engines, KubeMind AI uses its Knowledge Graph to perform **Causal Inference**. By analyzing dependency propagation paths, the system can isolate "Patient Zero" in complex cascading failures.
 
+### 🛡️ **Autonomous Decision Intelligence**
+The platform doesn't just report issues; it **evaluates actions**. For every incident, the **Decision Engine** generates multiple stabilization plans, testing each against the **Digital Twin** to provide explicit **Recovery Probabilities** and **Risk Scores**.
+
+### 📈 **Predictive Stability Mesh**
+The Predictive Intelligence Layer provides continuous failure forecasting. Using **Temporal Smoothing** and confidence consensus (0.7+), it eliminates noise to provide reliable count-downs to potential OOMKills or CPU storms.
+
+### 📜 **Forensic Audit & Lineage**
+Every AI conclusion is versioned and traceable. The **Reasoning Audit Trail** allows engineers to drill down into the specific evidence—metrics, logs, and agent contributions—that led to an inference.
+
+### 🔄 **Recursive Operational Learning**
+The **Truth Observer** monitors reality against predictions. Successful forecasts increase an agent's **Trust Reputation**, while false positives dampen influence, ensuring the cognitive mesh adapts and matures over time.
+
+---
+
+## 🖥️ Command Center UI
+
+The frontend has been evolved into an **Operational Cognition Workspace**:
+
+- **Executive Intelligence Layer** — High-level operational scores and aggregated instability risk.
+- **Cognitive Load Monitor** — Real-time visibility into AI confidence and reasoning latency.
+- **Stabilization Planner** — Interface for comparing AI-simulated counterfactual strategies.
+- **Reasoning Trace** — Forensic view of the metrics and agents contributing to a diagnosis.
+- **Reputation Indicators** — Visual transparency into the historical trust of every AI agent.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
 - Python 3.10+
 - Node.js 20+
 - npm 10+
 
-### 1. Clone & Install
+### 2. Launch the Platform
+KubeMind AI is designed to be portable and demo-ready.
 
 ```bash
+# Clone the repository
 git clone https://github.com/veeresh0804/ABB_Kubernetes.git
 cd ABB_Kubernetes
-```
 
-### 2. Start Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-python main.py
-```
-
-Backend runs on `http://localhost:8000`
-
-### 3. Start Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend runs on `http://localhost:5173`
-
-### One-Command Start
-
-**Windows:**
-```bash
+# Run the unified launcher (Windows)
 scripts\start-demo.bat
-```
 
-**macOS/Linux:**
-```bash
+# Run the unified launcher (macOS/Linux)
 chmod +x scripts/start-demo.sh
 ./scripts/start-demo.sh
 ```
 
----
-
-## Modes
-
-| Mode | Description |
-|------|-------------|
-| **LIVE** | Backend connected, real WebSocket telemetry streaming |
-| **SIMULATION** | Backend unavailable, browser-side fallback generating realistic metrics |
-| **DEGRADED** | Backend reachable but WebSocket disconnected, automatically reconnecting |
-
-The platform automatically transitions between modes. No manual intervention needed.
+The platform will automatically start the **FastAPI Cognitive Backend** (:8000) and the **React Command Center** (:5173).
 
 ---
 
-## Architecture
-
-```
-┌─────────────┐     WebSocket      ┌──────────────┐
-│   Frontend   │ ◄──── REST ────► │   Backend     │
-│  (:5173)     │                   │  (:8000)      │
-│              │                   │               │
-│  Dashboard   │                   │  Simulator    │
-│  Topology    │                   │  AI Agents    │
-│  AI Console  │                   │  Correlation  │
-│  Timeline    │                   │  Store        │
-└─────────────┘                   └──────────────┘
-       │                                │
-       │  Fallback Simulator            │
-       │  (browser-side, always ready)  │
-       └────────────────────────────────┘
-```
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | System health and driver status |
-| GET | `/api/pods` | Current pod metrics |
-| GET | `/api/dependencies` | Topology dependency graph |
-| GET | `/api/anomalies` | Detected anomalies |
-| GET | `/api/agents` | AI agent diagnostics |
-| GET | `/api/correlations` | Incident correlations |
-| POST | `/api/simulate/anomaly` | Trigger simulation scenario |
-| POST | `/api/nlp/query` | Natural language query |
-| POST | `/api/remediate` | Execute remediation action |
-| WS | `/ws/metrics` | Real-time telemetry stream |
-
----
-
-## AI Agents
-
-| Agent | Domain | Function |
-|-------|--------|----------|
-| 🔥 CPU Contention Agent | CPU · Real-time Analysis | Detects CPU pressure and contention |
-| 💧 Memory Leak Agent | Memory · Trend Analysis | Identifies memory growth patterns |
-| 💾 PVC Saturation Agent | Storage · I/O Analysis | Monitors disk I/O and saturation |
-| 🔄 Retry Storm Agent | Network · Traffic Analysis | Detects network retry anomalies |
-| 🧠 Cluster SRE Supervisor | Cross-agent Synthesis | Aggregates all agent findings |
-| ⚡ Stabilization Recommendation | Remediation | Suggests auto-remediation actions |
-| 🌐 Dependency Impact Analysis | Topology · Graph | Analyzes blast radius and cascading failures |
-
----
-
-## Simulation Scenarios
-
-Click scenario buttons in the top bar to trigger:
-
-- **PVC Cascade** — PostgreSQL storage I/O cascade failure
-- **Memory Leak** — Redis memory growth anomaly
-- **CPU Storm** — Payment service CPU spike
-
-AI agents respond with diagnostics, confidence scores, and remediation recommendations.
-
----
-
-## Project Structure
+## 📂 Project Structure (Evolved)
 
 ```
 ABB_Kubernetes/
-├── frontend/          # React + TypeScript SPA
+├── backend/                  # AI-Native Cognitive Monolith
+│   ├── agents/               # Cognitive AI Mesh (Log, CPU, Memory, etc.)
+│   │   ├── mesh.py           # Orchestration Layer
+│   │   └── log_agent.py      # Semantic Log Intelligence
+│   ├── engines/              # Reasoning Layers
+│   │   ├── causal_engine.py  # Topology-aware Causal Inference
+│   │   └── decision_engine.py# Strategy Evaluation Engine
+│   ├── data/                 # Digital Twin & Drivers
+│   │   ├── simulator.py      # Digital Twin with Counterfactual logic
+│   │   └── metric_store.py   # Hybrid Operational Memory (SQLite)
+│   ├── event_bus.py          # Asynchronous Nervous System
+│   ├── state_engine.py       # Operational State Engine
+│   ├── knowledge_graph.py    # Topology Intelligence Service
+│   ├── predictor.py          # Multi-horizon Predictive Layer
+│   ├── truth_observer.py     # Recursive Learning Loop
+│   └── main.py               # Gateway & REST/WS API
+│
+├── frontend/                 # Forensic Cognition Workspace
 │   ├── src/
-│   │   ├── components/   # Layout, Dashboard, DiagnosticPanel
-│   │   ├── hooks/        # useCluster, useTheme, useConnectionState
-│   │   └── pages/        # Dashboard, Agents, Dependencies, NLPChat
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── backend/           # FastAPI server
-│   ├── agents/           # AI agent implementations
-│   ├── data/             # Simulator, drivers, metric store
-│   ├── engines/          # Anomaly detection, correlation, NLP
-│   ├── main.py
-│   └── requirements.txt
-│
-├── docs/              # Documentation
-├── scripts/           # Startup scripts (.bat / .sh)
-├── .gitignore
-├── .env.example
-└── README.md
+│   │   ├── components/       # Layout, OperationalStory, DiagnosticPanel
+│   │   ├── hooks/            # useCluster (State Sync), useTheme
+│   │   └── pages/            # CommandCenter, Agents, Replay, NLPChat
 ```
 
 ---
 
-## Troubleshooting
+## 🧪 Intelligence Verification
 
-| Problem | Solution |
-|---------|----------|
-| WebSocket ECONNREFUSED | Ensure backend is running on port 8000 |
-| Blank dashboard | Wait 15s — fallback simulator auto-activates |
-| No AI output | Check backend logs for agent initialization errors |
-| ECharts chunk warning | Expected — charting library is large |
+The platform's architecture has been validated for:
+- **Causal Consistency** under noisy telemetry.
+- **Decision Stability** across versioned diagnostic cycles.
+- **Type Safety** via strict TypeScript and Pydantic schemas.
+- **Operational Trust** through evidence-grounded explainability.
 
 ---
 
-## License
+## 📄 License
 
-MIT
+MIT - Developed for the ABB Accelerator 2026.
