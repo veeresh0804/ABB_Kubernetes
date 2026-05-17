@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Clock, RefreshCw, AlertTriangle, Info, Zap } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
+import { Clock, RefreshCw, AlertTriangle, Info, Zap, Brain } from 'lucide-react';
 import type { ClusterState } from '../hooks/useCluster';
+import { NamespaceContext } from '../components/Layout';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -42,11 +43,14 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
   const [persistedEvents, setPersistedEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading]   = useState(false);
   const [lastFetch, setLastFetch] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<'success' | 'error' | null>(null);
+  const selectedNamespace = useContext(NamespaceContext);
 
   const fetchLog = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/incident-log`);
+      const res = await fetch(`${API_URL}/api/incident-log?namespace=${selectedNamespace}`);
       if (res.ok) {
         const data = await res.json();
         const events: TimelineEvent[] = (data.log || []).map((inc: any) => ({
@@ -64,7 +68,25 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
       // Backend not reachable — use live state only
     }
     setLoading(false);
-  }, []);
+  }, [selectedNamespace]);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    setExportStatus(null);
+    try {
+      const res = await fetch(`${API_URL}/api/report?namespace=${selectedNamespace}`);
+      if (!res.ok) throw new Error('Failed to fetch report');
+      const html = await res.text();
+      const blob = new Blob([html], { type: 'text/html' });
+      window.open(URL.createObjectURL(blob), '_blank');
+      setExportStatus('success');
+    } catch (e) {
+      setExportStatus('error');
+    } finally {
+      setIsExporting(false);
+      setTimeout(() => setExportStatus(null), 3000);
+    }
+  }, [selectedNamespace]);
 
   useEffect(() => {
     fetchLog();
@@ -110,6 +132,13 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
     if (PHASES[ev.phase]?.label === 'DIAGNOSIS') return <AlertTriangle size={10} />;
     return <Info size={10} />;
   };
+  
+  const getExportButtonContent = () => {
+    if (isExporting) return 'EXPORTING...';
+    if (exportStatus === 'success') return '✓ EXPORTED';
+    if (exportStatus === 'error') return '✗ FAILED';
+    return '↓ EXPORT REPORT';
+  };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -133,6 +162,24 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
         >
           <RefreshCw size={9} className={loading ? 'spin' : ''} />
           {loading ? 'fetching...' : `refresh${lastFetch ? ` · ${lastFetch}` : ''}`}
+        </button>
+        <button
+          onClick={handleExport}
+          disabled={isExporting || exportStatus !== null}
+          style={{
+            background: exportStatus === 'success' ? 'var(--km-healthy)' : exportStatus === 'error' ? 'var(--km-danger)' : 'var(--km-accent)',
+            color: '#fff',
+            border: 'none', borderRadius: 'var(--r-sm)',
+            padding: '3px 10px', fontSize: 9,
+            fontFamily: 'var(--km-mono)', fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            letterSpacing: 0.3,
+            transition: 'background 0.3s ease',
+            width: 120,
+            justifyContent: 'center',
+          }}
+        >
+          {getExportButtonContent()}
         </button>
       </div>
 
@@ -190,8 +237,16 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
           )}
 
           {allEvents.map((ev, i) => (
-            <div key={i} className="tl-item">
-              <div className="tl-dot" style={{ background: ev.color, borderColor: ev.color }} />
+            <div key={i} className="tl-item" style={{ 
+              borderLeft: ev.source === 'incident' ? '2px solid var(--km-accent)' : '1px solid var(--km-border)',
+              paddingLeft: ev.source === 'incident' ? 14 : 15,
+              opacity: ev.source === 'incident' ? 1 : 0.8
+            }}>
+              <div className="tl-dot" style={{ 
+                background: ev.color, 
+                borderColor: ev.color,
+                boxShadow: ev.source === 'incident' ? '0 0 8px var(--km-accent)' : 'none'
+              }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div className="tl-time">{ev.time}</div>
                 <span style={{
@@ -201,16 +256,23 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
                 }}>
                   {PHASES[ev.phase]?.label}
                 </span>
-                {ev.source === 'incident' && (
+                {ev.source === 'incident' ? (
                   <span style={{
                     fontSize: 7, color: 'var(--km-accent)', fontFamily: 'var(--km-mono)',
                     background: 'rgba(34,197,94,0.08)', borderRadius: 3, padding: '1px 4px',
+                    display: 'flex', alignItems: 'center', gap: 3
                   }}>
-                    AI
+                    <Brain size={8} /> COGNITIVE INFERENCE
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 7, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>
+                    TELEMETRY
                   </span>
                 )}
               </div>
-              <div className="tl-title">{ev.title}</div>
+              <div className="tl-title" style={{ color: ev.source === 'incident' ? 'var(--km-text)' : 'var(--km-secondary)' }}>
+                {ev.title}
+              </div>
               <div className="tl-detail">{ev.detail}</div>
             </div>
           ))}

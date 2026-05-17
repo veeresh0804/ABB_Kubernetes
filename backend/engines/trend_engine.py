@@ -1,7 +1,7 @@
 """
 Trend Analysis Engine — tracks metric history to detect slow-burn patterns.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import deque
 
 
@@ -15,6 +15,7 @@ class TrendEngine:
             pid = m["pod_id"]
             if pid not in self.history:
                 self.history[pid] = {
+                    "namespace": m.get("namespace"),
                     "cpu_percent": deque(maxlen=self.window_size),
                     "memory_pct":  deque(maxlen=self.window_size),
                     "latency_ms":  deque(maxlen=self.window_size),
@@ -64,6 +65,58 @@ class TrendEngine:
                     "confidence": 0.85 if is_monotonic else 0.60,
                 })
         return leaks
+
+    def predict_failures(self, namespace: Optional[str] = None) -> list:
+        """Linear extrapolation predictor. Returns TTF in minutes for pods near critical thresholds."""
+        from engines.anomaly_detector import THRESHOLDS
+        predictions = []
+        TICKS_PER_MINUTE = 30  # 2s per tick
+
+        for pod_id, pod_hist in self.history.items():
+            if namespace and namespace != "all" and pod_hist.get("namespace") != namespace:
+                continue
+
+            for metric, deq in pod_hist.items():
+                if not isinstance(deq, deque): continue # Skip non-metric data like 'namespace'
+                values = list(deq)
+                if len(values) < 15:
+                    continue
+                recent = values[-15:]
+                # Linear regression slope
+                n = len(recent)
+                xs = list(range(n))
+                x_mean = sum(xs) / n
+                y_mean = sum(recent) / n
+                num = sum((xs[i] - x_mean) * (recent[i] - y_mean) for i in range(n))
+                den = sum((xs[i] - x_mean) ** 2 for i in range(n))
+                slope = num / den if den != 0 else 0
+
+                if slope <= 0:
+                    continue  # Not growing, skip
+
+                current = recent[-1]
+                threshold = THRESHOLDS.get(metric, {}).get("critical")
+                if threshold is None or current >= threshold:
+                    continue
+
+                ticks_to_critical = (threshold - current) / slope
+                if ticks_to_critical <= 0 or ticks_to_critical > 1800:
+                    continue
+
+                ttf_minutes = round(ticks_to_critical / TICKS_PER_MINUTE, 1)
+                confidence = round(min(0.95, 0.6 + abs(slope) * 10), 2)
+                predictions.append({
+                    "pod_id":    pod_id,
+                    "metric":    metric,
+                    "current":   round(current, 2),
+                    "threshold": threshold,
+                    "slope_per_tick": round(slope, 4),
+                    "ttf_minutes":    ttf_minutes,
+                    "confidence":     confidence,
+                    "severity":  "CRITICAL" if ttf_minutes < 10 else "WARNING",
+                })
+
+        return sorted(predictions, key=lambda p: p["ttf_minutes"])[:5]
 
 
 # Singleton

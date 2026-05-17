@@ -38,12 +38,23 @@ export interface Correlation {
   rule_id: string; name: string; summary: string; severity: 'CRITICAL'|'WARNING';
   root_cause_pod?: string; root_metric?: string;
   causal_chain: string[]; affected_pods: string[]; recommendations: string[];
+  version?: number;
+  reasoning_audit_trail?: any[];
+  causal_evidence?: any;
+  strategies?: any[];
 }
 
 export interface AgentInsight {
   agent: string; icon: string; domain: string; status: string;
   finding: string; confidence: number; reasoning: string[]; recommendation: string;
   detail: Record<string,any>; timestamp: number; buffer_action?: string;
+  trust_score?: number;
+  governance?: {
+    avg_latency_ms: number;
+    health: string;
+    state: string;
+    cycle_count: number;
+  };
 }
 
 export interface ClusterHealth {
@@ -66,6 +77,7 @@ export interface ClusterState {
   graph: Graph;
   correlations: Correlation[];
   agents: AgentInsight[];
+  predictions: any[];
   sparkline?: number[];
   anomaly_mode: string | null;
   stabilization_mode?: 'OBSERVE' | 'RECOMMEND' | 'APPROVE' | 'STABILIZE';
@@ -105,7 +117,7 @@ const RECONNECT_MAX_MS = 30000;
 
 const EMPTY: ClusterState = {
   health: { score: 100, status: 'loading', anomaly_count: 0, critical_count: 0, warning_count: 0, pod_count: 0 },
-  pods: [], anomalies: [], graph: { nodes: [], edges: [] }, correlations: [], agents: [],
+  pods: [], anomalies: [], graph: { nodes: [], edges: [] }, correlations: [], agents: [], predictions: [],
   anomaly_mode: null, tick: 0, connected: false,
   connection: {
     backend: 'disconnected', websocket: 'disconnected',
@@ -113,16 +125,16 @@ const EMPTY: ClusterState = {
   },
 };
 
-/* ─── Browser-side fallback simulator ─── */
-function fallbackTick(prev: ClusterState): ClusterState {
+function fallbackTick(prev: ClusterState, namespace: string): ClusterState {
   const tick = prev.tick + 1;
-  const pods: PodMetric[] = [
+  const allPods: PodMetric[] = [
     { pod_id: 'frontend-service', pod_name: 'frontend-service', namespace: 'production', node: 'node-01', image: 'nginx:1.25', status: 'Running', cpu_percent: 12 + Math.sin(tick * 0.1) * 3 + (Math.random() - 0.5) * 3, memory_mb: 256 + Math.sin(tick * 0.05) * 20 + (Math.random() - 0.5) * 10, memory_limit_mb: 896, memory_pct: 28.6, network_in_mbps: 2.1, network_out_mbps: 1.8, pvc_read_mbps: 0, pvc_write_mbps: 0, latency_ms: 12 + Math.sin(tick * 0.1) * 2, restarts: 0, replicas: 2, timestamp: Date.now() / 1000 },
     { pod_id: 'auth-service', pod_name: 'auth-service', namespace: 'production', node: 'node-01', image: 'auth-svc:2.1.0', status: 'Running', cpu_percent: 18 + Math.sin(tick * 0.08 + 1) * 4 + (Math.random() - 0.5) * 2, memory_mb: 512 + Math.sin(tick * 0.04 + 2) * 30 + (Math.random() - 0.5) * 15, memory_limit_mb: 1792, memory_pct: 28.6, network_in_mbps: 1.2, network_out_mbps: 0.9, pvc_read_mbps: 0, pvc_write_mbps: 0, latency_ms: 8 + Math.sin(tick * 0.09 + 1) * 2, restarts: 0, replicas: 2, timestamp: Date.now() / 1000 },
     { pod_id: 'payment-service', pod_name: 'payment-service', namespace: 'production', node: 'node-02', image: 'payment-svc:1.4.2', status: 'Running', cpu_percent: 24 + Math.sin(tick * 0.12 + 3) * 5 + (Math.random() - 0.5) * 4, memory_mb: 768 + Math.sin(tick * 0.06 + 4) * 40 + (Math.random() - 0.5) * 20, memory_limit_mb: 2688, memory_pct: 28.6, network_in_mbps: 0.8, network_out_mbps: 0.6, pvc_read_mbps: 0, pvc_write_mbps: 0, latency_ms: 15 + Math.sin(tick * 0.11 + 3) * 3, restarts: 0, replicas: 3, timestamp: Date.now() / 1000 },
     { pod_id: 'redis-cache', pod_name: 'redis-cache', namespace: 'production', node: 'node-02', image: 'redis:7.2', status: 'Running', cpu_percent: 8 + Math.sin(tick * 0.07 + 5) * 2 + (Math.random() - 0.5) * 1.5, memory_mb: 1024 + Math.sin(tick * 0.03 + 6) * 50 + (Math.random() - 0.5) * 25, memory_limit_mb: 3584, memory_pct: 28.6, network_in_mbps: 3.5, network_out_mbps: 3.2, pvc_read_mbps: 0.5, pvc_write_mbps: 0.3, latency_ms: 5 + Math.sin(tick * 0.06 + 5) * 1, restarts: 0, replicas: 1, timestamp: Date.now() / 1000 },
     { pod_id: 'postgres-db', pod_name: 'postgres-db', namespace: 'production', node: 'node-03', image: 'postgres:15.3', status: 'Running', cpu_percent: 15 + Math.sin(tick * 0.05 + 7) * 3 + (Math.random() - 0.5) * 2, memory_mb: 2048 + Math.sin(tick * 0.02 + 8) * 60 + (Math.random() - 0.5) * 30, memory_limit_mb: 7168, memory_pct: 28.6, network_in_mbps: 0.4, network_out_mbps: 0.6, pvc_read_mbps: 2.1, pvc_write_mbps: 1.8, latency_ms: 10 + Math.sin(tick * 0.04 + 7) * 2, restarts: 0, replicas: 1, timestamp: Date.now() / 1000 },
   ];
+  const pods = namespace === 'all' ? allPods : allPods.filter(p => p.namespace === namespace);
 
   const anomalies: Anomaly[] = [];
   if (tick % 30 === 0 && tick > 0) {
@@ -169,7 +181,7 @@ function fallbackTick(prev: ClusterState): ClusterState {
   ];
 
   return {
-    ...prev, tick, health, pods, anomalies, agents,
+    ...prev, tick, health, pods, anomalies, agents, predictions: [],
     graph: { nodes, edges },
     sparkline: spark,
     correlations: [],
@@ -183,10 +195,12 @@ export function useCluster() {
   const [state, setState] = useState<ClusterState>(EMPTY);
   const [mode, setMode] = useState<ConnectionMode>('BOOTING');
   const [dataSource, setDataSource] = useState<'live' | 'simulated'>('simulated');
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('all');
   const { events, addEvent } = useEventLog();
 
   /* ── Refs ── */
   const modeRef = useRef<ConnectionMode>('BOOTING');
+  const namespaceRef = useRef('all');
   const mountedRef = useRef(true);
   const simStateRef = useRef<ClusterState>({ ...EMPTY, tick: 0 });
   const liveStateRef = useRef<ClusterState>(EMPTY);
@@ -217,7 +231,7 @@ export function useCluster() {
     if (simTimerRef.current !== undefined) return;
     simTimerRef.current = window.setInterval(() => {
       if (!mountedRef.current) return;
-      simStateRef.current = fallbackTick(simStateRef.current);
+      simStateRef.current = fallbackTick(simStateRef.current, namespaceRef.current);
       const m = modeRef.current;
       if (m !== 'LIVE') {
         setState((prev) => ({ ...simStateRef.current, connection: prev.connection }));
@@ -283,6 +297,10 @@ export function useCluster() {
       if (modeRef.current === 'LIVE') {
         setDataSource('live');
         addEvent('success', 'WebSocket connected — live telemetry active');
+      }
+      // Send current namespace on connect
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'set_namespace', namespace: namespaceRef.current }));
       }
       pingTimerRef.current = window.setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -503,7 +521,7 @@ export function useCluster() {
         wsRef.current = null;
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [startSim, startHealthPoll, startHeartbeatMonitor, stopSim, stopHealthPoll, stopHeartbeatMonitor]);
 
   /* ── Adjust health poll interval when mode changes ── */
   const prevModeRef = useRef<ConnectionMode>('BOOTING');
@@ -541,7 +559,7 @@ export function useCluster() {
     try {
       const r = await fetch(`${API_URL}/api/nlp/query`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, namespace: namespaceRef.current }),
       });
       return r.json();
     } catch {
@@ -549,13 +567,13 @@ export function useCluster() {
     }
   };
 
-  const executeRemediation = async (action: string, target: string, replicas?: number) => {
+  const executeRemediation = async (action: string, target: string, namespace: string, replicas?: number) => {
     if (modeRef.current !== 'LIVE') {
-      return { status: 'simulated', message: `[SIMULATION] Would execute: ${action} on ${target}` };
+      return { status: 'simulated', message: `[SIMULATION] Would execute: ${action} on ${target} in ${namespace}` };
     }
     const r = await fetch(`${API_URL}/api/remediate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, target, replicas }),
+      body: JSON.stringify({ action, target, namespace, replicas }),
     });
     return r.json();
   };
@@ -568,16 +586,26 @@ export function useCluster() {
     });
   };
 
+  const setNamespace = useCallback((namespace: string) => {
+    setSelectedNamespace(namespace);
+    namespaceRef.current = namespace;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsLog(`Setting namespace to ${namespace}`);
+      wsRef.current.send(JSON.stringify({ type: 'set_namespace', namespace }));
+    }
+  }, []);
+
   const getIncidentLog = async () => {
     if (modeRef.current !== 'LIVE') {
       return { log: [], count: 0, in_memory_count: 0 };
     }
-    const r = await fetch(`${API_URL}/api/incident-log`);
+    const r = await fetch(`${API_URL}/api/incident-log?namespace=${namespaceRef.current}`);
     return r.json();
   };
 
   return {
-    state, mode, dataSource, events,
+    state, mode, dataSource, events, selectedNamespace,
     triggerAnomaly, nlpQuery, executeRemediation, setStabilizationMode, getIncidentLog,
+    setNamespace,
   };
 }

@@ -5,7 +5,7 @@ import {
   ShieldCheck, Radar, Activity, AlertTriangle,
   Settings, Sun, Moon, Search, Bell, Plus, List,
   Terminal, Power, RefreshCw, Lock, Radio,
-  Wifi, HardDrive,
+  Wifi, HardDrive, Brain,
 } from 'lucide-react';
 import type { ClusterState, ConnectionMode, ConnectionEvent } from '../hooks/useCluster';
 
@@ -15,8 +15,10 @@ interface LayoutProps {
   dataSource: 'live' | 'simulated';
   events: ConnectionEvent[];
   simulateAnomaly: (s: string) => Promise<any>;
-  executeRemediation: (a: string, t: string, r?: number) => Promise<any>;
+  executeRemediation: (a: string, t: string, ns: string, r?: number) => Promise<any>;
   setStabilizationMode: (mode: string) => Promise<any>;
+  setNamespace: (namespace: string) => void;
+  selectedNamespace: string;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   children: React.ReactNode;
@@ -24,12 +26,72 @@ interface LayoutProps {
 
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 3, WARNING: 2, ERROR: 1, INFO: 0 };
 
+export const NamespaceContext = React.createContext<string>('all');
+
 export function Layout({
   state, mode, dataSource, events,
   simulateAnomaly, executeRemediation, setStabilizationMode,
-  theme, onToggleTheme, children
+  setNamespace, selectedNamespace, theme, onToggleTheme, children
 }: LayoutProps) {
   const [showEvents, setShowEvents] = useState(false);
+  const [scenarioProgress, setScenarioProgress] = React.useState(0);
+  const [activeScenario, setActiveScenario] = React.useState<string | null>(null);
+  const progressPollRef = React.useRef<number | undefined>(undefined);
+
+  const startScenarioPolling = React.useCallback(() => {
+    if (progressPollRef.current) clearInterval(progressPollRef.current);
+    progressPollRef.current = window.setInterval(async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/simulate/status`);
+        const data = await res.json();
+        setScenarioProgress(data.progress || 0);
+        setActiveScenario(data.anomaly_mode || null);
+        if (!data.anomaly_mode) {
+          clearInterval(progressPollRef.current);
+          progressPollRef.current = undefined;
+          setScenarioProgress(0);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+  }, []);
+
+  const handleScenario = React.useCallback(async (scenario: string) => {
+    await simulateAnomaly(scenario);
+    setActiveScenario(scenario);
+    setScenarioProgress(0);
+    startScenarioPolling();
+  }, [simulateAnomaly, startScenarioPolling]);
+
+  const handleClearScenario = React.useCallback(async () => {
+    await simulateAnomaly('clear');
+    setActiveScenario(null);
+    setScenarioProgress(0);
+    if (progressPollRef.current) {
+      clearInterval(progressPollRef.current);
+      progressPollRef.current = undefined;
+    }
+  }, [simulateAnomaly]);
+
+  React.useEffect(() => {
+    return () => { if (progressPollRef.current) clearInterval(progressPollRef.current); };
+  }, []);
+
+  const [healthHistory, setHealthHistory] = React.useState<number[]>([]);
+
+  React.useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/health-history`);
+        if (res.ok) {
+          const data = await res.json();
+          setHealthHistory(data.scores || []);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchHistory();
+    const id = setInterval(fetchHistory, 10000);
+    return () => clearInterval(id);
+  }, []);
 
   const conn = state.connection;
   const modeLabel = mode === 'BOOTING' ? 'BOOTING' : mode === 'CONNECTING' ? 'CONNECTING' : mode === 'LIVE' ? 'LIVE' : mode === 'DEGRADED' ? 'DEGRADED' : mode === 'SIMULATION' ? 'SIMULATION' : 'RECONNECTING';
@@ -50,7 +112,7 @@ export function Layout({
 
   const handleReboot = () => {
     setShowEvents(true);
-    executeRemediation('restart_pod', 'frontend-service');
+    executeRemediation('restart_pod', 'frontend-service', selectedNamespace);
   };
 
   const handleSync = () => {
@@ -102,6 +164,24 @@ export function Layout({
           <span className="sidebar-brand-name">KubeMind AI</span>
         </div>
 
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--km-border)' }}>
+          <select
+            value={selectedNamespace}
+            onChange={e => setNamespace(e.target.value)}
+            style={{
+              width: '100%', padding: '5px 8px', fontSize: 11,
+              fontFamily: 'var(--km-mono)', background: 'var(--km-surface)',
+              border: '1px solid var(--km-border)', borderRadius: 'var(--r-sm)',
+              color: 'var(--km-text)', cursor: 'pointer',
+            }}
+          >
+            <option value="all">All Namespaces</option>
+            <option value="production">production</option>
+            <option value="batch">batch</option>
+            <option value="monitoring">monitoring</option>
+          </select>
+        </div>
+
         <div className="sidebar-section">Operational</div>
         <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <LayoutDashboard size={16} /> Command Center
@@ -113,12 +193,12 @@ export function Layout({
           <Share2 size={16} /> Network Mesh
         </NavLink>
         <NavLink to="/replay" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <PackageCheck size={16} /> Logistics Pipe
+          <PackageCheck size={16} /> Incident Replay
         </NavLink>
 
         <div className="sidebar-section">Security</div>
         <NavLink to="/nlp" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <ShieldCheck size={16} /> Protocol Logs
+          <ShieldCheck size={16} /> NLP Chat
         </NavLink>
         <div className="nav-item">
           <Radar size={16} /> Active Threats
@@ -136,6 +216,30 @@ export function Layout({
           </div>
           <div className="sidebar-stability-bar">
             <div className="sidebar-stability-fill" style={{ width: `${stabilityScore}%` }} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <div className="sidebar-stability-header" style={{ marginBottom: 4 }}>
+              <span className="sidebar-stability-label">Health Trend (3min)</span>
+              {healthHistory.length > 0 && <span className="sidebar-stability-value">{healthHistory[healthHistory.length - 1]}%</span>}
+            </div>
+            {healthHistory.length > 2 && (() => {
+              const W = 184, H = 28;
+              const min = Math.min(...healthHistory, 0);
+              const max = Math.max(...healthHistory, 100);
+              const range = max - min || 1;
+              const pts = healthHistory.map((v, i) => {
+                const x = (i / (healthHistory.length - 1)) * W;
+                const y = H - ((v - min) / range) * H;
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+              }).join(' ');
+              const worst = Math.min(...healthHistory);
+              const color = worst > 80 ? 'var(--km-healthy)' : worst > 50 ? 'var(--km-warn)' : 'var(--km-danger)';
+              return (
+                <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+                  <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                </svg>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--km-border)' }}>
             {[
@@ -169,11 +273,18 @@ export function Layout({
               <span className="topbar-uptime-label">Uptime</span>
               <span className="topbar-uptime-value">{uptimeStr}</span>
             </div>
+            <div className="topbar-divider" />
+            <div className="topbar-uptime" title="Aggregated AI Confidence and Reasoning Latency">
+              <span className="topbar-uptime-label">COGNITIVE LOAD</span>
+              <span className="topbar-uptime-value" style={{ color: avgConfidence > 80 ? 'var(--km-healthy)' : 'var(--km-warn)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Brain size={10} /> {avgConfidence}% <span style={{ fontSize: 8, opacity: 0.6 }}>· {Math.round(state.agents.reduce((s, a) => s + (a.governance?.avg_latency_ms || 0), 0) / Math.max(state.agents.length, 1))}ms</span>
+              </span>
+            </div>
           </div>
           <div className="topbar-right">
-            <button className="topbar-cta" onClick={handleNewDirective}>
-              <Plus size={14} /> New Directive
-            </button>
+            <button className="topbar-cta" onClick={() => handleScenario('pvc_cascade')}>PVC Cascade</button>
+            <button className="topbar-cta" onClick={() => handleScenario('memory_leak')}>Memory Leak</button>
+            <button className="topbar-cta" onClick={() => handleScenario('cpu_storm')}>CPU Storm</button>
             <div className="topbar-divider" />
             <button className="topbar-icon-btn"><Search size={16} /></button>
             <button className="topbar-icon-btn"><Bell size={16} /></button>
@@ -186,8 +297,37 @@ export function Layout({
           </div>
         </header>
 
+        {activeScenario && (
+          <div style={{ position: 'relative', height: 3, background: 'var(--km-border)', flexShrink: 0, transition: 'all 0.3s ease-in-out' }}>
+            <div style={{
+              position: 'absolute', left: 0, top: 0, height: '100%',
+              width: `${Math.round(scenarioProgress * 100)}%`,
+              background: scenarioProgress > 0.7 ? 'var(--km-danger)' : scenarioProgress > 0.4 ? 'var(--km-warn)' : 'var(--km-healthy)',
+              transition: 'width 1.8s ease, background 0.4s ease',
+              borderRadius: '0 2px 2px 0',
+            }} />
+            <div style={{
+              position: 'absolute', right: 12, top: 4,
+              fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-muted)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ color: scenarioProgress > 0.7 ? 'var(--km-danger)' : 'var(--km-warn)', fontWeight: 700 }}>
+                {activeScenario.replace(/_/g, ' ').toUpperCase()}
+              </span>
+              <span>{Math.round(scenarioProgress * 100)}%</span>
+              <button onClick={handleClearScenario} style={{
+                background: 'none', border: '1px solid var(--km-border)', borderRadius: 3,
+                color: 'var(--km-dim)', fontSize: 8, fontFamily: 'var(--km-mono)',
+                padding: '1px 5px', cursor: 'pointer',
+              }}>CLEAR</button>
+            </div>
+          </div>
+        )}
+
         <div className="main-content-area">
-          {children}
+          <NamespaceContext.Provider value={selectedNamespace}>
+            {children}
+          </NamespaceContext.Provider>
         </div>
 
         <footer className="bottom-ticker">

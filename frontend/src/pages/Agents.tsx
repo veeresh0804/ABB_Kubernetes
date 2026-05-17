@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useContext } from 'react';
 import { ChevronUp, ChevronDown, Activity, Play, Bot } from 'lucide-react';
 import type { ClusterState } from '../hooks/useCluster';
+import { NamespaceContext } from '../components/Layout';
 
 const ICON_BG: Record<string, string> = {
   'CPU Contention Agent': 'rgba(239,68,68,0.08)',
@@ -29,7 +30,27 @@ const cardBorder = (s: string) => s === 'CRITICAL' ? 'alert-state' : s === 'WARN
 const actionCls = (s: string) => s === 'CRITICAL' ? 'alert' : s === 'WARNING' ? 'warn' : 'ok';
 const confBarCls = (pct: number) => pct > 80 ? 'high' : pct > 60 ? 'med' : 'low';
 
-const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a: any; onRemediate: (agent: any) => void; acting: boolean }) {
+function ConfSparkline({ history }: { history: number[] }) {
+  if (history.length < 2) return null;
+  const W = 44, H = 18;
+  const min = Math.min(...history, 0.6);
+  const max = Math.max(...history, 1.0);
+  const range = max - min || 0.01;
+  const pts = history.map((v, i) => {
+    const x = (i / (history.length - 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const last = history[history.length - 1];
+  const color = last > 0.85 ? 'var(--km-healthy)' : last > 0.7 ? 'var(--km-warn)' : 'var(--km-danger)';
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ flexShrink: 0 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting, confHistory }: { a: any; onRemediate: (agent: any) => void; acting: boolean; confHistory: number[] }) {
   const [expanded, setExpanded] = useState(false);
   const sevColor = SEVERITY_COLORS[a.status] || '#64748B';
   const pct = (a.confidence * 100).toFixed(0);
@@ -50,6 +71,23 @@ const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a:
       <div className="agent-meta">
         <div className="conf-bar-wrap"><div className={`conf-bar ${confBarCls(a.confidence * 100)}`} style={{ width: `${pct}%` }} /></div>
         <span className="conf-val">{pct}%</span>
+        <ConfSparkline history={confHistory} />
+        {a.trust_score !== undefined && (
+          <span style={{ 
+            fontSize: 7, fontWeight: 700, fontFamily: 'var(--km-mono)', 
+            color: a.trust_score > 0.9 ? 'var(--km-accent)' : 'var(--km-dim)',
+            background: 'rgba(34,197,94,0.05)', padding: '1px 4px', borderRadius: 3,
+            border: '0.5px solid rgba(34,197,94,0.1)'
+          }}>
+            REPUTATION: {Math.round(a.trust_score * 100)}%
+          </span>
+        )}
+        {a.governance && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+             <span style={{ fontSize: 7, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)', opacity: 0.8 }}>{a.governance.avg_latency_ms}ms</span>
+             <span style={{ width: 4, height: 4, borderRadius: '50%', background: a.governance.health === 'HEALTHY' ? 'var(--km-healthy)' : 'var(--km-danger)' }} />
+          </div>
+        )}
         <span className={`agent-action ${actionCls(a.status)}`}>{ACTION_TEXT[a.status] || 'Monitoring'}</span>
       </div>
       {a.reasoning?.length > 0 && (
@@ -79,19 +117,34 @@ const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a:
   );
 });
 
-export function Agents({ state, executeRemediation }: { state: ClusterState; executeRemediation: (a: string, t: string, r?: number) => Promise<any> }) {
+export function Agents({ state, executeRemediation }: { state: ClusterState; executeRemediation: (a: string, t: string, ns: string, r?: number) => Promise<any> }) {
   const [acting, setActing] = useState<string | null>(null);
   const agents = useMemo(() => state.agents, [state.agents]);
+  const selectedNamespace = useContext(NamespaceContext);
+  const confidenceHistory = React.useRef<Map<string, number[]>>(new Map());
+
+  React.useEffect(() => {
+    agents.forEach(a => {
+      const history = confidenceHistory.current.get(a.agent) || [];
+      history.push(a.confidence);
+      if (history.length > 30) history.shift();
+      confidenceHistory.current.set(a.agent, [...history]);
+    });
+  }, [agents]);
 
   const handleRemediate = useCallback(async (agent: any) => {
     setActing(agent.agent);
     try {
       let action = agent.buffer_action;
       if (action === 'restart_unhealthy_replica') action = 'restart_pod';
-      const target = agent.detail?.pod || agent.detail?.hot_pod || agent.detail?.root_pod || 'frontend-service';
-      await executeRemediation(action, target);
+      const target = agent.detail?.pod || agent.detail?.hot_pod || agent.detail?.root_pod;
+      if (target) {
+        await executeRemediation(action, target, selectedNamespace);
+      } else {
+        console.error("Remediation action triggered without a valid target.", agent);
+      }
     } finally { setActing(null); }
-  }, [executeRemediation]);
+  }, [executeRemediation, selectedNamespace]);
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -101,7 +154,12 @@ export function Agents({ state, executeRemediation }: { state: ClusterState; exe
       </div>
       <div className="agent-grid">
         {agents.length ? agents.map(a => (
-          <AgentCard key={a.agent} a={a} onRemediate={handleRemediate} acting={acting === a.agent} />
+          <AgentCard
+            key={a.agent} a={a}
+            onRemediate={handleRemediate}
+            acting={acting === a.agent}
+            confHistory={confidenceHistory.current.get(a.agent) || []}
+          />
         )) : [...Array(7)].map((_, i) => <div key={i} className="shimmer" style={{ height: 140 }} />)}
       </div>
     </div>

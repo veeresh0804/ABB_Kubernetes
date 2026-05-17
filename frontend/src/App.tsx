@@ -11,7 +11,7 @@ import { IncidentReplay } from './pages/IncidentReplay';
 import './index.css';
 
 function LayoutWrapper() {
-  const { state, mode, dataSource, events, triggerAnomaly, nlpQuery, executeRemediation, setStabilizationMode } = useCluster();
+  const { state, mode, dataSource, events, selectedNamespace, triggerAnomaly, nlpQuery, executeRemediation, setStabilizationMode, setNamespace } = useCluster();
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -23,6 +23,8 @@ function LayoutWrapper() {
       simulateAnomaly={triggerAnomaly}
       executeRemediation={executeRemediation}
       setStabilizationMode={setStabilizationMode}
+      selectedNamespace={selectedNamespace}
+      setNamespace={setNamespace}
       theme={theme}
       onToggleTheme={toggleTheme}
     >
