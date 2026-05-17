@@ -1,136 +1,22 @@
 import React, { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { AlertTriangle, Activity, Cpu, Server, Clock, ShieldCheck, HardDrive, GitBranch, Wifi } from 'lucide-react';
+import { Activity, ShieldCheck, Users, Terminal } from 'lucide-react';
 import type { ClusterState, AgentInsight } from '../hooks/useCluster';
 import { OperationalStory } from '../components/OperationalStory';
 
-const SEP = { margin: '0 3px', color: 'var(--km-dim)', fontSize: 9 };
-
-const KubeMetric = React.memo(function KubeMetric({
-  label, value, sub, subCls, icon, badge
+const AetherMetric = React.memo(function AetherMetric({
+  label, value, sub, subColor, children
 }: {
-  label: string; value: string; sub: string; subCls: string; icon: React.ReactNode; badge?: string;
+  label: string; value: string; sub: string; subColor: string; children?: React.ReactNode;
 }) {
   return (
-    <div className={`telem-mod ${subCls === 'crit' ? 'crit' : subCls === 'warn' ? 'warn' : ''}`}>
-      {badge && <span className="badge badge-alert" style={{ position: 'absolute', top: 6, right: 6, fontSize: 6 }}>{badge}</span>}
-      <div className="telem-label">{label}</div>
-      <div className="telem-top">
-        <div className="telem-value">{value}</div>
-        <span style={{ color: 'var(--km-dim)', marginBottom: 1 }}>{icon}</span>
+    <div style={{ background: 'rgba(24,24,27,0.3)', border: '1px solid var(--km-border)', borderRadius: 8, padding: '20px 24px' }}>
+      <p style={{ fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--km-display)', fontSize: 28, fontWeight: 700, color: 'var(--km-text)', letterSpacing: '-0.03em' }}>{value}</span>
+        <span style={{ fontFamily: 'var(--km-mono)', fontSize: 10, color: subColor }}>{sub}</span>
       </div>
-      <div className={`telem-sub ${subCls}`}>
-        <span style={{ width: 4, height: 4, borderRadius: '50%', background: subCls === 'ok' ? 'var(--km-healthy)' : subCls === 'warn' ? 'var(--km-warn)' : 'var(--km-danger)', display: 'inline-block' }} />
-        {sub}
-      </div>
-    </div>
-  );
-});
-
-const PodRow = React.memo(function PodRow({ pod }: { pod: any }) {
-  const cpu = pod.cpu_percent || 0;
-  const cls = cpu > 70 ? 'high' : cpu > 40 ? 'mid' : 'low';
-  return (
-    <div className="pod-row">
-      <div>
-        <div className="pod-name">{pod.pod_name}</div>
-        <div className="pod-ns">ns: {pod.namespace}</div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div className="bar-wrap"><div className={`bar-fill ${cls}`} style={{ width: `${Math.min(cpu, 100)}%` }} /></div>
-        <span className="pod-pct">{cpu.toFixed(0)}%</span>
-      </div>
-    </div>
-  );
-});
-
-const AlertItem = React.memo(function AlertItem({ a }: { a: any }) {
-  const cls = a.severity === 'CRITICAL' ? 'crit' : 'warn';
-  const SeverityIcon = a.severity === 'CRITICAL' ? AlertTriangle : Activity;
-  const now = new Date(a.timestamp * 1000);
-  const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const label = a.metric === 'cpu_percent' ? 'CPU Storm' : a.metric === 'memory_pct' ? 'Memory Leak' : a.metric === 'pvc_write_mbps' ? 'PVC Saturation' : a.metric === 'latency_ms' ? 'Latency Spike' : a.metric;
-
-  return (
-    <div className={`alert-item ${cls}`}>
-      <SeverityIcon size={12} className="alert-icon" />
-      <div style={{ flex: 1 }}>
-        <div className="alert-title">{label} · {a.pod_name}</div>
-        <div className="alert-body">{a.message}</div>
-        <div className="alert-meta">{time} · {a.severity}{a.value ? ` · value: ${a.value}` : ''}</div>
-      </div>
-      <span className={`badge ${a.severity === 'CRITICAL' ? 'badge-alert' : 'badge-warning'}`}>
-        {a.severity === 'CRITICAL' ? 'CRIT' : 'WARN'}
-      </span>
-    </div>
-  );
-});
-
-const NarrativeTimeline = React.memo(function NarrativeTimeline({ agents }: { agents: AgentInsight[] }) {
-  const items = useMemo(() => {
-    return agents.slice(0, 5).map(a => ({
-      time: new Date(a.timestamp * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-      text: a.finding,
-      severity: a.status === 'CRITICAL' ? 'crit' : a.status === 'WARNING' ? 'warn' : 'info',
-    }));
-  }, [agents]);
-
-  const dotColor = (s: string) => s === 'crit' ? 'var(--km-danger)' : s === 'warn' ? 'var(--km-warn)' : 'var(--km-accent)';
-
-  if (items.length === 0) {
-    return <div className="empty-state"><div className="empty-state-text">Awaiting operational telemetry...</div></div>;
-  }
-
-  return (
-    <div className="narrative-timeline">
-      {items.map((item, i) => (
-        <div key={i} className="narrative-item">
-          <span className="narrative-time">{item.time}</span>
-          <span className="narrative-dot" style={{ background: dotColor(item.severity) }} />
-          <span className="narrative-text">{item.text}</span>
-        </div>
-      ))}
-    </div>
-  );
-});
-
-const ResChart = React.memo(function ResChart({
-  label, value, unit, color, data
-}: {
-  label: string; value: string; unit: string; color: string; data?: number[];
-}) {
-  const chartData = useMemo(() => data || Array.from({ length: 20 }, () => Math.random() * 50 + 15), [data]);
-  const min = Math.min(...chartData);
-  const max = Math.max(...chartData);
-  const range = max - min || 1;
-  const points = chartData.map((v, i) => {
-    const x = (i / (chartData.length - 1)) * 100;
-    const y = 36 - ((v - min) / range) * 28;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  const areaPoints = chartData.map((v, i) => {
-    const x = (i / (chartData.length - 1)) * 100;
-    const y = 36 - ((v - min) / range) * 28;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-
-  return (
-    <div className="resource-mod">
-      <div className="resource-label">{label}</div>
-      <div className="resource-top">
-        <div className="resource-value">{value}<span style={{ fontSize: 8, fontWeight: 500, color: 'var(--km-muted)', marginLeft: 2 }}>{unit}</span></div>
-      </div>
-      <svg className="resource-chart" viewBox="0 0 100 36" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={`rg-${label.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polyline fill={`url(#rg-${label.replace(/\s/g, '')})`} points={`0,36 ${areaPoints} 100,36`} />
-        <polyline fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-        <circle cx={points.split(' ').pop()?.split(',')[0] || 100} cy={points.split(' ').pop()?.split(',')[1] || 8} r="1.5" fill={color} />
-      </svg>
+      {children && <div style={{ marginTop: 16 }}>{children}</div>}
     </div>
   );
 });
@@ -182,6 +68,34 @@ const TopologyGraph = React.memo(function TopologyGraph({ state }: { state: Clus
   );
 });
 
+const NarrativeTimeline = React.memo(function NarrativeTimeline({ agents }: { agents: AgentInsight[] }) {
+  const items = useMemo(() => {
+    return agents.slice(0, 5).map(a => ({
+      time: new Date(a.timestamp * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      text: a.finding,
+      severity: a.status === 'CRITICAL' ? 'crit' : a.status === 'WARNING' ? 'warn' : 'info',
+    }));
+  }, [agents]);
+
+  const dotColor = (s: string) => s === 'crit' ? 'var(--km-danger)' : s === 'warn' ? 'var(--km-warn)' : 'var(--km-accent)';
+
+  if (items.length === 0) {
+    return <div className="empty-state"><div className="empty-state-text">Awaiting operational telemetry...</div></div>;
+  }
+
+  return (
+    <div className="narrative-timeline">
+      {items.map((item, i) => (
+        <div key={i} className="narrative-item">
+          <span className="narrative-time">{item.time}</span>
+          <span className="narrative-dot" style={{ background: dotColor(item.severity) }} />
+          <span className="narrative-text">{item.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 export function Dashboard({ state, dataSource }: { state: ClusterState; dataSource?: 'live' | 'simulated' }) {
   const { health, pods, anomalies, correlations, agents, sparkline = [] } = state;
 
@@ -197,190 +111,199 @@ export function Dashboard({ state, dataSource }: { state: ClusterState; dataSour
   const totalPods = pods.length;
   const runningPods = pods.filter(p => p.status === 'Running').length;
 
-  const cpuSub = avgCpu > 60 ? 'Elevated' : avgCpu > 40 ? 'Moderate' : 'Normal';
-  const cpuCls = avgCpu > 60 ? 'crit' : avgCpu > 40 ? 'warn' : 'ok';
-  const memSub = avgMem > 75 ? 'Pressure' : avgMem > 50 ? 'Elevated' : 'Stable';
-  const memCls = avgMem > 75 ? 'crit' : avgMem > 50 ? 'warn' : 'ok';
-  const latSub = maxLat > 100 ? 'Degraded' : 'Healthy';
-  const latCls = maxLat > 100 ? 'crit' : 'ok';
+  const cpuSub = avgCpu > 60 ? '+2.4%' : avgCpu > 40 ? '+1.1%' : 'STABLE';
+  const memSub = avgMem > 75 ? 'HIGH' : avgMem > 50 ? 'ELEVATED' : 'NORMAL';
+  const latSub = maxLat > 100 ? 'DEGRADED' : 'HEALTHY';
+  const cpuSubColor = avgCpu > 60 ? 'var(--km-warn)' : 'var(--km-accent)';
+  const memSubColor = avgMem > 75 ? 'var(--km-danger)' : 'var(--km-accent)';
+  const latSubColor = maxLat > 100 ? 'var(--km-danger)' : 'var(--km-accent)';
 
-  const chartOpts = useMemo(() => ({
-    grid: { top: 6, right: 6, bottom: 14, left: 26 },
-    xAxis: { type: 'category' as const, show: false, data: sparkline.map((_: number, i: number) => i) },
-    yAxis: { type: 'value' as const, min: 0, max: 100, splitLine: { lineStyle: { color: 'var(--km-border)', opacity: 0.3 } }, axisLabel: { fontSize: 7, color: 'var(--km-dim)' } },
-    series: [{
-      data: sparkline, type: 'line' as const, smooth: true, symbol: 'none',
-      lineStyle: { color: 'var(--km-telem)', width: 1.5 },
-      areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(0, 201, 255, 0.12)' }, { offset: 1, color: 'rgba(0, 201, 255, 0)' }] } },
-    }],
-    backgroundColor: 'transparent',
-    animation: false,
-  }), [sparkline]);
+  const alertCount = health.critical_count + health.warning_count;
+  const threatLevel = health.critical_count > 0 ? 'HIGH' : health.warning_count > 0 ? 'ELEVATED' : 'LOW';
+  const threatColor = health.critical_count > 0 ? 'var(--km-danger)' : health.warning_count > 0 ? 'var(--km-warn)' : 'var(--km-accent)';
 
-  const alertsCritical = useMemo(() => anomalies.filter(a => a.severity === 'CRITICAL'), [anomalies]);
-  const alertsWarn = useMemo(() => anomalies.filter(a => a.severity !== 'CRITICAL'), [anomalies]);
-  const resData = useMemo(() => sparkline.length >= 20 ? sparkline : Array.from({ length: 20 }, (_, i) => sparkline[i] || 20 + Math.random() * 30), [sparkline]);
+  const miniChart = useMemo(() => {
+    const data = sparkline.length >= 10 ? sparkline : [40, 55, 48, 62, 58, 70, 65, 78, 68, 85].map(v => v + (Math.random() - 0.5) * 10);
+    const max = Math.max(...data);
+    return data.map(v => ({ h: Math.round((v / max) * 100) }));
+  }, [sparkline]);
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* INCIDENT STORY */}
       <OperationalStory correlation={correlations[0]} anomalies={anomalies} />
 
-      {/* TOP ROW: Infrastructure Topology + KubeMetrics */}
-      <div className="dashboard-top-row">
-        {/* LEFT: Infrastructure Topology */}
-        <div className="card card-topo">
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><GitBranch size={11} /> Infrastructure Topology</span>
-            <span style={{ fontSize: 7, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>
-              {state.graph.nodes.length} services
-            </span>
-          </div>
-          <TopologyGraph state={state} />
-          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            {[['var(--km-healthy)','Healthy'],['var(--km-warn)','Warning'],['var(--km-danger)','Critical']].map(([c,l]) => (
-              <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 7, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)' }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, display: 'inline-block' }} />
-                {l}
-              </div>
+      {/* AETHER OS METRIC CARDS */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+        <AetherMetric label="CPU Usage" value={`${avgCpu.toFixed(0)}%`} sub={cpuSub} subColor={cpuSubColor}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 40 }}>
+            {miniChart.map((d, i) => (
+              <div key={i} style={{ flex: 1, background: i === miniChart.length - 1 ? 'var(--km-accent)' : 'var(--km-border)', height: `${d.h}%`, borderRadius: 1 }} />
             ))}
-            <span style={{ marginLeft: 'auto', fontSize: 6, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>Drag to explore</span>
+          </div>
+        </AetherMetric>
+        <AetherMetric label="Active Pods" value={`${runningPods}/${totalPods}`} sub={runningPods === totalPods ? 'STABLE' : 'DEGRADED'} subColor={runningPods === totalPods ? 'var(--km-accent)' : 'var(--km-warn)'}>
+          <div style={{ height: 40, display: 'flex', alignItems: 'center' }}>
+            <Users size={36} style={{ color: 'var(--km-border)' }} />
+          </div>
+        </AetherMetric>
+        <AetherMetric label="Memory Avg" value={`${avgMem.toFixed(0)}%`} sub={memSub} subColor={memSubColor}>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < Math.round(avgMem / 10) ? avgMem > 75 ? 'var(--km-danger)' : 'var(--km-accent)' : 'var(--km-border)' }} />
+            ))}
+          </div>
+        </AetherMetric>
+        <AetherMetric label="Latency" value={`${maxLat.toFixed(0)}ms`} sub={latSub} subColor={latSubColor}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--km-border)' }} />
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--km-border)' }} />
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--km-accent)', background: 'var(--km-accent-dim)' }} />
+          </div>
+        </AetherMetric>
+      </section>
+
+      {/* OPERATIONAL GRID: Topology + Event Stream */}
+      <section style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20 }}>
+        {/* LEFT: Topology with scanline overlay */}
+        <div style={{ background: 'rgba(24,24,27,0.2)', border: '1px solid var(--km-border)', borderRadius: 8, position: 'relative', overflow: 'hidden', minHeight: 380 }}>
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.08, backgroundImage: 'radial-gradient(circle at 2px 2px, #27272a 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+          <div className="scanline" />
+          <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(9,9,11,0.8)', border: '1px solid var(--km-border)', padding: '6px 12px', borderRadius: 4 }}>
+            <Activity size={10} style={{ color: 'var(--km-accent)' }} />
+            <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--km-secondary)' }}>Live_Feed: Infrastructure Topology</span>
+          </div>
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10, display: 'flex', gap: 4 }}>
+            <button style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(9,9,11,0.8)', border: '1px solid var(--km-border)', color: 'var(--km-muted)', cursor: 'pointer' }}>-</button>
+            <button style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(9,9,11,0.8)', border: '1px solid var(--km-border)', color: 'var(--km-muted)', cursor: 'pointer' }}>+</button>
+          </div>
+          <div style={{ padding: '48px 16px 16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 200 }}>
+              <TopologyGraph state={state} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8 }}>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div><p style={{ fontSize: 8, color: 'var(--km-dim)' }}>SERVICES</p><p style={{ fontSize: 11, fontFamily: 'var(--km-mono)', color: 'var(--km-secondary)' }}>{state.graph.nodes.length}</p></div>
+                <div><p style={{ fontSize: 8, color: 'var(--km-dim)' }}>CONNECTIONS</p><p style={{ fontSize: 11, fontFamily: 'var(--km-mono)', color: 'var(--km-secondary)' }}>{state.graph.edges.length}</p></div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                {[['var(--km-healthy)','Healthy'],['var(--km-warn)','Warning'],['var(--km-danger)','Critical']].map(([c, l]) => (
+                  <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, display: 'inline-block' }} />
+                    <span style={{ fontSize: 8, color: 'var(--km-dim)' }}>{l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: KubeMetrics */}
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><Activity size={11} /> KubeMetrics</span>
-            <span className={`badge ${dataSource === 'live' ? 'badge-ok' : 'badge-warning'}`} style={{ fontSize: 7 }}>
-              {dataSource === 'live' ? 'LIVE' : 'SIMULATED'}
-            </span>
-          </div>
-          <div className="telem-grid">
-            <KubeMetric label="CPU Usage" value={`${avgCpu.toFixed(0)}%`} sub={cpuSub} subCls={cpuCls} icon={<Cpu size={12} />} />
-            <KubeMetric label="Memory" value={`${avgMem.toFixed(0)}%`} sub={memSub} subCls={memCls} icon={<HardDrive size={12} />} />
-            <KubeMetric label="Pods" value={`${runningPods}/${totalPods}`} sub={`${totalPods - runningPods} degraded`} subCls={runningPods === totalPods ? 'ok' : 'warn'} icon={<Server size={12} />} badge={totalPods - runningPods > 0 ? `${totalPods - runningPods}` : undefined} />
-            <KubeMetric label="Latency" value={`${maxLat.toFixed(0)}ms`} sub={latSub} subCls={latCls} icon={<Clock size={12} />} />
-          </div>
-          {sparkline.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 7, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>CPU Waveform</div>
-              <ReactECharts option={chartOpts} style={{ height: 80 }} opts={{ renderer: 'canvas' }} />
+        {/* RIGHT: Event Stream */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ background: 'rgba(24,24,27,0.3)', border: '1px solid var(--km-border)', borderRadius: 8, padding: 20, flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontFamily: 'var(--km-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--km-text)' }}>Event Stream</h3>
+              <span style={{ fontSize: 10, color: 'var(--km-dim)', cursor: 'pointer' }}>View All</span>
             </div>
-          )}
-        </div>
-      </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {anomalies.length === 0 && (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--km-accent)', marginTop: 4, flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: 12, color: 'var(--km-secondary)' }}>All systems operational — no active anomalies.</p>
+                    <span style={{ fontSize: 10, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>System nominal</span>
+                  </div>
+                </div>
+              )}
+              {anomalies.map((a, i) => (
+                <div key={i} style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: a.severity === 'CRITICAL' ? 'var(--km-danger)' : 'var(--km-warn)', marginTop: 4, flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: 12, color: 'var(--km-secondary)' }}>{a.message}</p>
+                    <span style={{ fontSize: 10, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>
+                      {new Date(a.timestamp * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      {/* MID ROW: Active Alerts + Resource Utilization */}
-      <div className="dashboard-mid-row">
-        {/* LEFT: Active Alerts */}
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><AlertTriangle size={11} /> Active Alerts</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              {anomalies.length > 0 && <span className="badge badge-alert" style={{ fontSize: 8 }}>{anomalies.length} active</span>}
-              <span className={`badge ${dataSource === 'live' ? 'badge-ok' : 'badge-warning'}`} style={{ fontSize: 7 }}>
-                {dataSource === 'live' ? 'LIVE' : 'SIMULATED'}
-              </span>
+          {/* Terminal */}
+          <div style={{ background: 'var(--km-bg)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 8, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <Terminal size={14} style={{ color: 'var(--km-accent)' }} />
+              <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>KubeMind Core Terminal</span>
             </div>
-          </div>
-          {anomalies.length === 0 ? (
-            <div style={{ padding: '12px 0', fontSize: 10, color: 'var(--km-dim)', fontStyle: 'italic' }}>
-              No active alerts — system nominal
-            </div>
-          ) : (
-            <>
-              {alertsCritical.slice(0, 2).map((a, i) => <AlertItem key={`c-${i}`} a={a} />)}
-              {alertsWarn.slice(0, 2).map((a, i) => <AlertItem key={`w-${i}`} a={a} />)}
-            </>
-          )}
-        </div>
-
-        {/* RIGHT: Resource Utilization */}
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><Wifi size={11} /> Resource Utilization</span>
-          </div>
-          <div className="resource-grid">
-            <ResChart label="CPU" value={avgCpu.toFixed(0)} unit="%" color="var(--km-accent)" data={resData} />
-            <ResChart label="Memory" value={avgMem.toFixed(0)} unit="%" color="var(--km-warn)" data={resData.map(v => Math.min(v * 0.8 + 10, 100))} />
-            <ResChart label="Disk I/O" value={maxDisk.toFixed(1)} unit="MB/s" color="var(--km-telem)" data={resData.map(v => Math.max(0, v * 0.6 + 2))} />
-            <ResChart label="Network" value={totalNetIn.toFixed(1)} unit="Mb/s" color="var(--km-accent2)" data={resData.map(v => Math.max(0, v * 0.5 + 5))} />
-          </div>
-        </div>
-      </div>
-
-      {/* BOTTOM ROW: Top CPU + Operational Timeline */}
-      <div className="dashboard-bottom-row">
-        {/* LEFT: Top CPU */}
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><Cpu size={11} /> Top CPU Consumers</span>
-          </div>
-          {topCpu.slice(0, 5).map(p => <PodRow key={p.pod_id} pod={p} />)}
-          {topCpu.length === 0 && (
-            <div className="empty-state" style={{ padding: '10px 0' }}>
-              <div className="empty-state-text">No pod data</div>
-            </div>
-          )}
-        </div>
-
-        {/* RIGHT: Operational Timeline */}
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-header">
-            <span className="card-title" style={{ marginBottom: 0 }}><Clock size={11} /> Operational Timeline</span>
-          </div>
-          <div className="ops-timeline">
-            <div className="ops-event">
-              <span className="ops-event-time">12:45</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-danger)' }} />
-              <span className="ops-event-text"><strong>Retry storm</strong> detected · payment-service</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">12:47</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-warn)' }} />
-              <span className="ops-event-text"><strong>Latency propagation</strong> · 3 services affected</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">12:50</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-warn)' }} />
-              <span className="ops-event-text"><strong>CPU escalation</strong> · api-gateway</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">12:52</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-danger)' }} />
-              <span className="ops-event-text"><strong>Memory leak</strong> · redis-cache</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">12:55</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-accent)' }} />
-              <span className="ops-event-text"><strong>AI analysis</strong> completed · root cause identified</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">12:57</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-accent2)' }} />
-              <span className="ops-event-text"><strong>Recommendations</strong> generated for mitigation</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">13:00</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-healthy)' }} />
-              <span className="ops-event-text"><strong>Engineer notified</strong> · mitigation in progress</span>
-            </div>
-            <div className="ops-event">
-              <span className="ops-event-time">13:02</span>
-              <span className="ops-event-dot" style={{ background: 'var(--km-telem)' }} />
-              <span className="ops-event-text"><strong>Stabilization</strong> sequence initiated</span>
+            <div style={{ fontFamily: 'var(--km-mono)', fontSize: 10, color: 'rgba(16,185,129,0.7)', lineHeight: 1.8 }}>
+              <p>&gt; query systems --status</p>
+              <p style={{ color: 'var(--km-accent)' }}>[SYSTEM] All modules responding...</p>
+              <p>&gt; authenticate root</p>
+              <p style={{ animation: 'pulse 1s infinite' }}>_</p>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* AI Agent Summary strip */}
+      {/* INFRASTRUCTURE TABLE */}
+      <section style={{ background: 'rgba(24,24,27,0.1)', border: '1px solid var(--km-border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--km-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontFamily: 'var(--km-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--km-text)' }}>Connected Infrastructure</h3>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={{ padding: '4px 10px', fontSize: 9, border: '1px solid var(--km-border)', background: 'transparent', color: 'var(--km-muted)', cursor: 'pointer', borderRadius: 4, fontFamily: 'var(--km-mono)' }}>Filter</button>
+            <button style={{ padding: '4px 10px', fontSize: 9, border: '1px solid var(--km-border)', background: 'transparent', color: 'var(--km-muted)', cursor: 'pointer', borderRadius: 4, fontFamily: 'var(--km-mono)' }}>Export</button>
+          </div>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: 'rgba(24,24,27,0.4)' }}>
+              <th style={{ padding: '10px 24px', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', textAlign: 'left', fontFamily: 'var(--km-mono)' }}>Resource ID</th>
+              <th style={{ padding: '10px 24px', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', textAlign: 'left', fontFamily: 'var(--km-mono)' }}>Type</th>
+              <th style={{ padding: '10px 24px', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', textAlign: 'left', fontFamily: 'var(--km-mono)' }}>Status</th>
+              <th style={{ padding: '10px 24px', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', textAlign: 'left', fontFamily: 'var(--km-mono)' }}>Efficiency</th>
+              <th style={{ padding: '10px 24px', fontSize: 9, fontWeight: 700, color: 'var(--km-dim)', textTransform: 'uppercase', textAlign: 'right', fontFamily: 'var(--km-mono)' }}>Last Sync</th>
+            </tr>
+          </thead>
+          <tbody style={{ borderTop: '1px solid var(--km-border)' }}>
+            {topCpu.slice(0, 4).map((p, i) => {
+              const status = p.status === 'Running' ? 'Operational' : 'Offline';
+              const isOperational = status === 'Operational';
+              const efficiency = Math.min(Math.round(p.cpu_percent + 20), 100);
+              return (
+                <tr key={p.pod_id || i} style={{ borderBottom: '1px solid rgba(39,39,42,0.3)', cursor: 'pointer', transition: 'background 0.1s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(39,39,42,0.15)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                  <td style={{ padding: '12px 24px', fontFamily: 'var(--km-mono)', fontSize: 11, color: 'var(--km-secondary)' }}>#{p.pod_id.toUpperCase().slice(0, 9)}</td>
+                  <td style={{ padding: '12px 24px', fontSize: 12, color: 'var(--km-dim)' }}>{p.namespace === 'production' ? 'Compute Node' : 'Storage Hub'}</td>
+                  <td style={{ padding: '12px 24px' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', background: isOperational ? 'rgba(16,185,129,0.1)' : 'rgba(39,39,42,0.3)', color: isOperational ? 'var(--km-accent)' : 'var(--km-dim)', border: `1px solid ${isOperational ? 'rgba(16,185,129,0.2)' : 'transparent'}` }}>
+                      {status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 60, height: 6, background: 'var(--km-border)', borderRadius: 999, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${efficiency}%`, background: efficiency > 75 ? 'var(--km-accent)' : efficiency > 40 ? 'var(--km-warn)' : 'var(--km-dim)', borderRadius: 999 }} />
+                      </div>
+                      <span style={{ fontSize: 9, fontFamily: 'var(--km-mono)', color: 'var(--km-secondary)' }}>{efficiency}%</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px 24px', fontSize: 11, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)', textAlign: 'right' }}>{(Math.random() * 5).toFixed(2)}s ago</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+
+      {/* AI Agent Status bar */}
       {agents.length > 0 && (
-        <div className="card" style={{ padding: 10 }}>
-          <div className="card-header" style={{ marginBottom: 6 }}>
-            <span className="card-title" style={{ marginBottom: 0 }}><ShieldCheck size={11} /> AI Agent Status</span>
-            <span style={{ fontSize: 7, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>
+        <section style={{ background: 'rgba(24,24,27,0.1)', border: '1px solid var(--km-border)', borderRadius: 8, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontFamily: 'var(--km-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--km-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ShieldCheck size={14} /> AI Agent Status
+            </span>
+            <span style={{ fontSize: 9, color: 'var(--km-dim)', fontFamily: 'var(--km-mono)' }}>
               {agents.filter(a => a.status === 'CRITICAL').length} critical · {agents.filter(a => a.status === 'WARNING').length} warnings
             </span>
           </div>
@@ -396,15 +319,17 @@ export function Dashboard({ state, dataSource }: { state: ClusterState; dataSour
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Operational Narrative */}
       {agents.length > 0 && (
-        <div className="card" style={{ padding: 12 }}>
-          <div className="card-title"><Activity size={11} /> Operational Narrative</div>
+        <section style={{ background: 'rgba(24,24,27,0.1)', border: '1px solid var(--km-border)', borderRadius: 8, padding: 20 }}>
+          <div style={{ fontFamily: 'var(--km-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--km-text)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            <Activity size={14} /> Operational Narrative
+          </div>
           <NarrativeTimeline agents={agents} />
-        </div>
+        </section>
       )}
     </div>
   );

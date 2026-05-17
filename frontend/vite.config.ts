@@ -14,5 +14,8 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    hmr: {
+      timeout: 10000,
+    },
   },
 });

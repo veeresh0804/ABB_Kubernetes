@@ -36,13 +36,15 @@ const AgentCard = React.memo(function AgentCard({ a, onRemediate, acting }: { a:
 
   return (
     <div className={`agent-card ${cardBorder(a.status)}`}>
-      <span className={`badge agent-badge ${badgeCls(a.status)}`}>{a.status}</span>
-      <div className="agent-head">
-        <div className="agent-icon" style={{ background: ICON_BG[a.agent] || 'var(--km-surface)', color: sevColor }}>{a.icon}</div>
-        <div>
-          <div className="agent-name">{a.agent}</div>
-          <div className="agent-status-text">{a.domain}</div>
+      <div className="agent-card-header">
+        <div className="agent-title-group">
+          <div className="agent-icon" style={{ background: ICON_BG[a.agent] || 'var(--km-surface)', color: sevColor }}>{a.icon}</div>
+          <div className="agent-text">
+            <div className="agent-name">{a.agent}</div>
+            <div className="agent-status-text">{a.domain}</div>
+          </div>
         </div>
+        <span className={`status-badge ${badgeCls(a.status)}`}>{a.status}</span>
       </div>
       <div className="agent-insight" style={{ color: a.status === 'CRITICAL' ? 'var(--km-danger)' : a.status === 'WARNING' ? 'var(--km-warn)' : 'var(--km-secondary)' }}>"{a.finding}"</div>
       <div className="agent-meta">

@@ -92,12 +92,16 @@ export interface ConnectionEvent {
 /* ─── Constants ─── */
 const API_URL = import.meta.env.VITE_API_URL || '';
 const WS_URL = import.meta.env.VITE_WS_URL || (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + `//${window.location.host}/ws/metrics`;
+const IS_DEV = import.meta.env.DEV;
+const wsLog = IS_DEV ? (msg: string) => console.log(`[WS] ${msg}`) : () => {};
 const BOOT_FAIL_THRESHOLD = 3;
 const BOOT_POLL_MS = 5000;
 const SIM_POLL_MS = 10000;
 const HEARTBEAT_STALE_MS = 10000;
 const HEARTBEAT_CHECK_MS = 2000;
 const SIM_TICK_MS = 2000;
+const RECONNECT_BASE_MS = IS_DEV ? 3000 : 1000;
+const RECONNECT_MAX_MS = 30000;
 
 const EMPTY: ClusterState = {
   health: { score: 100, status: 'loading', anomaly_count: 0, critical_count: 0, warning_count: 0, pod_count: 0 },
@@ -190,12 +194,16 @@ export function useCluster() {
   const wsRef = useRef<WebSocket | null>(null);
   const healthFailCountRef = useRef(0);
 
+  const connectingRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+
   /* Timer refs */
   const simTimerRef = useRef<number | undefined>(undefined);
   const healthTimerRef = useRef<number | undefined>(undefined);
   const hbTimerRef = useRef<number | undefined>(undefined);
   const pingTimerRef = useRef<number | undefined>(undefined);
   const wsConnectTimerRef = useRef<number | undefined>(undefined);
+  const reconnectTimerRef = useRef<number | undefined>(undefined);
 
   /* ── Simulation engine (always running in background) ── */
   const stopSim = useCallback(() => {
@@ -217,19 +225,52 @@ export function useCluster() {
     }, SIM_TICK_MS);
   }, []);
 
-  /* ── WebSocket connect ── */
+  /* ── WebSocket connect (singleton) ── */
   const connectWS = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    wsRef.current?.close();
+    if (!mountedRef.current) return;
+    if (connectingRef.current) {
+      wsLog('Connect blocked — already connecting');
+      return;
+    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsLog('Already connected');
+      return;
+    }
+
+    connectingRef.current = true;
+    wsLog('Connecting...');
+
+    /* Clean up previous socket + timers */
+    const prev = wsRef.current;
+    if (prev) {
+      prev.onopen = null;
+      prev.onmessage = null;
+      prev.onclose = null;
+      prev.onerror = null;
+      if (prev.readyState === WebSocket.OPEN || prev.readyState === WebSocket.CONNECTING) {
+        prev.close();
+      }
+    }
+    clearInterval(pingTimerRef.current);
+    pingTimerRef.current = undefined;
+    clearTimeout(wsConnectTimerRef.current);
+    wsConnectTimerRef.current = undefined;
+
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     const to = setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) ws.close();
+      if (ws.readyState === WebSocket.CONNECTING) {
+        wsLog('Connection timeout');
+        ws.close();
+      }
     }, 5000);
 
     ws.onopen = () => {
       clearTimeout(to);
+      connectingRef.current = false;
+      wsLog('Connected');
+      reconnectAttemptRef.current = 0;
       lastLiveUpdateRef.current = Date.now();
       const m = modeRef.current;
       if (m === 'CONNECTING' || m === 'RECONNECTING') {
@@ -270,10 +311,15 @@ export function useCluster() {
       } catch { /* ignore */ }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       clearTimeout(to);
+      connectingRef.current = false;
+      wsLog(`Closed (code=${ev.code})`);
       clearInterval(pingTimerRef.current);
       pingTimerRef.current = undefined;
+
+      if (!mountedRef.current) return;
+
       const m = modeRef.current;
       const next = applyTransition(m, 'WS_CLOSED');
       if (next) {
@@ -283,16 +329,23 @@ export function useCluster() {
       if (next === 'DEGRADED') {
         addEvent('warning', 'WebSocket disconnected — attempting reconnect');
         setDataSource('simulated');
+        /* Exponential backoff reconnect */
+        const attempt = reconnectAttemptRef.current;
+        const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt), RECONNECT_MAX_MS);
+        reconnectAttemptRef.current = attempt + 1;
+        wsLog(`Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = window.setTimeout(() => {
+          if (mountedRef.current) connectWS();
+        }, delay);
       } else if (next === 'SIMULATION') {
         addEvent('warning', 'Backend unreachable — simulation mode activated');
         setDataSource('simulated');
       }
-      // Schedule reconnect
-      clearTimeout(wsConnectTimerRef.current);
-      wsConnectTimerRef.current = undefined;
     };
 
     ws.onerror = () => {
+      connectingRef.current = false;
       ws.close();
     };
   }, [addEvent]);
@@ -425,6 +478,7 @@ export function useCluster() {
 
   /* ── Unified interval manager — adjusts polling based on mode ── */
   useEffect(() => {
+    mountedRef.current = true;
     startSim();
     startHeartbeatMonitor();
 
@@ -438,8 +492,16 @@ export function useCluster() {
       stopHealthPoll();
       stopHeartbeatMonitor();
       clearTimeout(wsConnectTimerRef.current);
+      clearTimeout(reconnectTimerRef.current);
       clearInterval(pingTimerRef.current);
-      wsRef.current?.close();
+      if (wsRef.current) {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
