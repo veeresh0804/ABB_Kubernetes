@@ -24,7 +24,6 @@ from data.k8s_driver import kube_driver
 from data.prometheus_driver import prometheus_driver
 from data.metric_store import metric_store
 from engines.anomaly_detector import detect
-# from engines.correlation_engine import correlate  # Retained for reference; runtime uses causal_engine
 from engines.nlp_engine import process as nlp_process
 from engines.trend_engine import trend_engine
 
@@ -227,8 +226,7 @@ stabilization_mode: str = "RECOMMEND"
 def _append_incident(entry: dict) -> None:
     incident_log.append(entry)
     if len(incident_log) > MAX_INCIDENT_LOG:
-        incident_log[:] = incident_log[-MAX_INCIDENT_LOG:] 
-last_stabilization: Dict[str, float] = {} # pod_id -> timestamp
+        incident_log[:] = incident_log[-MAX_INCIDENT_LOG:]
 
 # ─── WebSocket Manager ────────────────────────────────────────────────────────
 @app.websocket("/ws/metrics")
@@ -264,9 +262,10 @@ async def ws_metrics(websocket: WebSocket):
 async def api_health():
     return {
         "status": "ok", "version": "1.0.0", "service": "KubeMind AI",
+        "connected": kube_driver.connected or prometheus_driver.connected,
         "drivers": {
-            "kubernetes": {"connected": kube_driver.connected, "context": kube_driver.context_name},
-            "prometheus": {"connected": prometheus_driver.connected, "url": prometheus_driver.url}
+            "kubernetes": kube_driver.connected,
+            "prometheus": prometheus_driver.connected,
         }
     }
 
@@ -431,7 +430,11 @@ class RemediationRequest(BaseModel):
     action: str; target: str; namespace: str; replicas: Optional[int] = None
 
 @app.post("/api/remediate")
-async def api_remediate(body: RemediationRequest, api_key: str = Depends(get_api_key)): # FIX: Add API key auth
+async def api_remediate(body: RemediationRequest, api_key: str = Depends(get_api_key)):
+    if body.action not in ("restart_pod", "scale_deployment", "isolate_pod"):
+        raise HTTPException(status_code=400, detail=f"Action '{body.action}' is not allowed. Allowed actions: restart_pod, scale_deployment, isolate_pod.")
+    if body.action == "restart_pod" and body.namespace == "kube-system":
+        raise HTTPException(status_code=403, detail="Cannot restart pods in kube-system namespace.")
     result = await kube_driver.execute_remediation(action=body.action, target=body.target, namespace=body.namespace, replicas=body.replicas)
     metric_store.save_remediation(action=body.action, target=body.target, namespace=body.namespace, status=result.get("status", "unknown"), message=result.get("message", ""))
     if result["status"] == "error": raise HTTPException(status_code=500, detail=result["message"])

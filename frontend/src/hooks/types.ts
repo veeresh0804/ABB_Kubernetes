@@ -1,5 +1,6 @@
 // frontend/src/hooks/types.ts
-import { WebSocket } from "ws";
+// Note: WebSocket type is available globally in browser environments.
+// If server-side WS is needed, run: npm install --save-dev @types/ws
 
 export interface PodMetric {
   pod_id: string; pod_name: string; namespace: string;

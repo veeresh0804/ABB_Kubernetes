@@ -20,13 +20,16 @@ echo "[2/4] Starting backend server..."
 cd "$DIR/backend"
 python main.py &
 BACKEND_PID=$!
-sleep 3
-echo "      ✓ Backend starting on http://localhost:8000"
+echo "      Waiting for backend to be ready..."
+until curl -s http://localhost:8000/api/health > /dev/null 2>&1; do sleep 1; done
+echo "      ✓ Backend ready on http://localhost:8000"
 echo ""
 
 echo "[3/4] Installing frontend dependencies..."
 cd "$DIR/frontend"
-npm install --silent
+if [ ! -d "node_modules" ]; then
+  npm install --silent
+fi
 echo "      ✓ Frontend dependencies ready"
 echo ""
 

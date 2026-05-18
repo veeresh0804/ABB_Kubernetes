@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { applyTransition } from './useConnectionState';
 import { useEventLog } from './useEventLog';
-import { useWebSocket } from './useWebSocket'; // FIX F-002: Import new WebSocket hook
-import { useHealthPoller } from './useHealthPoller'; // FIX F-002: Import new Health Poller hook
+import { useWebSocket } from './useWebSocket';
+import { useHealthPoller } from './useHealthPoller';
 import type { PodMetric, Anomaly, GraphNode, GraphEdge, Graph, Correlation, AgentInsight, ClusterHealth, ConnectionStatus, ClusterState, ConnectionMode, ConnectionEvent } from './types';
+export type { PodMetric, Anomaly, GraphNode, GraphEdge, Graph, Correlation, AgentInsight, ClusterHealth, ConnectionStatus, ClusterState, ConnectionMode, ConnectionEvent };
 
 /* ─── Constants ─── */
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -384,13 +385,43 @@ export function useCluster() {
   const simScenarioStartTickRef = useRef(0);
   const liveStateRef = useRef<ClusterState>(EMPTY);
   const lastLiveUpdateRef = useRef(0);
-  // const wsRef = useRef<WebSocket | null>(null); // FIX F-002: Moved to useWebSocket
-  // const healthFailCountRef = useRef(0); // Moved to useHealthPoller
-
-  // const connectingRef = useRef(false); // FIX F-002: Moved to useWebSocket
+  const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
 
-  // FIX F-002: Integrate useHealthPoller hook
+  // Integrate useWebSocket hook
+  const { connectWS: wsConnect } = useWebSocket({
+    wsUrl: WS_URL,
+    addEvent,
+    onMessage: (data: ClusterState) => {
+      liveStateRef.current = data;
+      lastLiveUpdateRef.current = Date.now();
+      setState(data);
+    },
+    onClose: () => {
+      const next = applyTransition(mode, 'WS_CLOSED');
+      if (next) {
+        modeRef.current = next;
+        setMode(next);
+        setDataSource('simulated');
+      }
+    },
+    onOpen: () => {
+      const next = applyTransition(mode, 'WS_OPEN');
+      if (next) {
+        modeRef.current = next;
+        setMode(next);
+        setDataSource('live');
+      }
+    },
+    namespace: selectedNamespace,
+    mode,
+    reconnectAttempt: reconnectAttemptRef.current,
+    setReconnectAttempt: (n: number) => { reconnectAttemptRef.current = n; },
+    mounted: mountedRef,
+  });
+  wsRef.current = null; // Will be set by useWebSocket internally
+
+  // Integrate useHealthPoller hook
   const { startHealthPoll, stopHealthPoll, runHealthCheck } = useHealthPoller({
     apiUrl: API_URL,
     bootFailThreshold: BOOT_FAIL_THRESHOLD,
@@ -402,12 +433,10 @@ export function useCluster() {
     setState,
     setMode,
     setDataSource,
-    connectWS,
+    connectWS: wsConnect,
     mounted: mountedRef,
     simStateRef,
   });
-
-  /* Timer refs */
   const simTimerRef = useRef<number | undefined>(undefined);
   // const healthTimerRef = useRef<number | undefined>(undefined); // Moved to useHealthPoller
   const hbTimerRef = useRef<number | undefined>(undefined);

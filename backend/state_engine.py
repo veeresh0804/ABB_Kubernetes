@@ -14,7 +14,6 @@ from event_bus import event_bus
 import events
 from data.simulator import simulator
 
-# Centralized State Cache
 STATE_CACHE: Dict[str, Any] = {
     "health": {
         "score": 100, "status": "healthy", "pod_count": 0,
@@ -26,8 +25,8 @@ STATE_CACHE: Dict[str, Any] = {
     "correlations": [],
     "agents": [],
     "predictions": [],
-    "agent_trust_scores": {}, 
-    "active_strategies": {}, # Phase 11: evaluated stabilization plans
+    "agent_trust_scores": {},
+    "active_strategies": {},
     "stabilization_mode": "RECOMMEND",
     "anomaly_mode": None,
     "tick": 0,
@@ -36,7 +35,6 @@ STATE_CACHE: Dict[str, Any] = {
 STATE_LOCK = asyncio.Lock()
 
 def _cluster_health(metrics: list, anomalies: list) -> dict:
-    """Calculates cluster health. Moved from main.py for state cohesion."""
     score = 100
     critical = sum(1 for a in anomalies if a["severity"] == "CRITICAL")
     warning  = sum(1 for a in anomalies if a["severity"] == "WARNING")
@@ -58,17 +56,15 @@ class StateEngine:
         self.tasks: List[asyncio.Task] = []
 
     async def start(self):
-        """Starts the state aggregator workers."""
         self.running = True
-        
-        telemetry_queue = event_bus.subscribe("TelemetryMetricsEvent")
-        anomaly_queue = event_bus.subscribe("AnomalyEvent")
+
+        telemetry_queue   = event_bus.subscribe("TelemetryMetricsEvent")
+        anomaly_queue     = event_bus.subscribe("AnomalyEvent")
         correlation_queue = event_bus.subscribe("CorrelationEvent")
-        agent_queue = event_bus.subscribe("AgentInsightEvent")
-        prediction_queue = event_bus.subscribe("PredictionEvent")
-        feedback_queue = event_bus.subscribe("CognitiveFeedbackEvent")
-        strategy_queue = event_bus.subscribe("StrategyEvent")
-        topology_trigger_queue = event_bus.subscribe("TelemetryMetricsEvent")
+        agent_queue       = event_bus.subscribe("AgentInsightEvent")
+        prediction_queue  = event_bus.subscribe("PredictionEvent")
+        feedback_queue    = event_bus.subscribe("CognitiveFeedbackEvent")
+        strategy_queue    = event_bus.subscribe("StrategyEvent")
 
         async def consume_telemetry():
             while self.running:
@@ -79,7 +75,6 @@ class StateEngine:
                         if event.metrics:
                             STATE_CACHE["tick"] = event.metrics[0].get("tick", STATE_CACHE["tick"])
                         STATE_CACHE["anomaly_mode"] = simulator.anomaly_mode
-                        
                         health = _cluster_health(event.metrics, STATE_CACHE["anomalies"])
                         STATE_CACHE["health"] = health
                 except asyncio.CancelledError:
@@ -110,12 +105,10 @@ class StateEngine:
                 try:
                     event: events.CorrelationEvent = await correlation_queue.get()
                     c = event.correlation
-                    # Add timestamp to correlation if missing
                     if "timestamp" not in c:
                         c["timestamp"] = time.time()
                     rule_id = c.get("rule_id", c.get("event_id", str(time.time())))
                     correlation_map[rule_id] = c
-                    # Prune correlations older than 5 minutes
                     now = time.time()
                     correlation_map = {
                         k: v for k, v in correlation_map.items()
@@ -136,7 +129,6 @@ class StateEngine:
                     event: events.AgentInsightEvent = await agent_queue.get()
                     agent_name = event.insight["agent"]
                     agent_map[agent_name] = event.insight
-                    
                     async with STATE_LOCK:
                         STATE_CACHE["agents"] = list(agent_map.values())
                 except asyncio.CancelledError:
@@ -146,14 +138,13 @@ class StateEngine:
                     await asyncio.sleep(0.1)
 
         async def consume_predictions():
-            local_prediction_map = {} # pod_id:metric -> prediction
+            local_prediction_map = {}
             while self.running:
                 try:
                     event: events.PredictionEvent = await prediction_queue.get()
                     p = event.prediction
                     key = f"{p['pod_id']}:{p['metric']}"
                     local_prediction_map[key] = p
-                    
                     async with STATE_LOCK:
                         sorted_p = sorted(local_prediction_map.values(), key=lambda x: x["ttf_minutes"])
                         STATE_CACHE["predictions"] = sorted_p[:5]
@@ -183,7 +174,6 @@ class StateEngine:
                 try:
                     event: events.StrategyEvent = await strategy_queue.get()
                     async with STATE_LOCK:
-                        # Map strategy to its parent correlation
                         STATE_CACHE["active_strategies"][event.correlation_id] = {
                             "strategies": [s.dict() for s in event.strategies],
                             "recommended_index": event.recommended_strategy_index,
@@ -199,7 +189,7 @@ class StateEngine:
             from knowledge_graph import knowledge_graph
             while self.running:
                 try:
-                    await topology_trigger_queue.get()
+                    await asyncio.sleep(2)
                     topology = await knowledge_graph.get_topology("all")
                     async with STATE_LOCK:
                         STATE_CACHE["graph"] = topology
@@ -221,7 +211,6 @@ class StateEngine:
         ])
 
     async def stop(self):
-        """Stops the state aggregator workers."""
         self.running = False
         for task in self.tasks:
             task.cancel()
@@ -229,9 +218,7 @@ class StateEngine:
         self.tasks.clear()
 
     async def get_state(self) -> Dict[str, Any]:
-        """Returns a deep copy of the current state to prevent mutation between consumers."""
         async with STATE_LOCK:
             return copy.deepcopy(STATE_CACHE)
 
-# Singleton instance
 state_engine = StateEngine()

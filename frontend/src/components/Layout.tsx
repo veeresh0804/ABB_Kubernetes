@@ -29,7 +29,7 @@ export const NamespaceContext = React.createContext<string>('all');
 export function Layout({
   state, theme, onToggleTheme, children,
   simulateAnomaly, executeRemediation, selectedNamespace, setNamespace,
-  simScenario, simProgress
+  simScenario, simProgress, dataSource
 }: LayoutProps) {
 
   const handleScenario = useCallback(async (scenario: string) => {

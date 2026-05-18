@@ -52,6 +52,9 @@ yarn-error.log*
 Desktop.ini
 Thumbs.db
 
+# Agent skills (AI coding assistant metadata)
+.agents/
+
 # Test outputs
 .pytest_cache/
 .coverage
