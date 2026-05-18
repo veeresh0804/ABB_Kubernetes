@@ -98,10 +98,27 @@ export const CommandCenter: React.FC<{ state: ClusterState }> = ({ state }) => {
                </div>
             </div>
             
-            <div className="shimmer" style={{ height: '100%', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-               <div style={{ textAlign: 'center' }}>
-                  <Network size={48} style={{ color: 'var(--km-accent)', opacity: 0.2, marginBottom: 16 }} className="pulse-active" />
-                  <div style={{ fontFamily: 'var(--km-mono)', fontSize: 10, color: 'var(--km-dim)', letterSpacing: '0.2em' }}>TOPOLOGY INTELLIGENCE FABRIC ACTIVE</div>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
+               <div style={{ fontFamily: 'var(--km-mono)', fontSize: 8, color: 'var(--km-dim)', marginBottom: 4 }}>
+                  {state.graph.nodes.length} nodes · {state.graph.edges.length} edges
+                  {state.anomaly_mode && <span style={{ color: 'var(--km-danger)', marginLeft: 8 }}>⚡ {state.anomaly_mode.replace(/_/g, ' ')}</span>}
+               </div>
+               {(state.graph.nodes || []).slice(0, 8).map(n => {
+                  const sev = state.graph.edges.filter(e => e.source === n.id).length > 2 ? 'warning' : n.severity;
+                  return (
+                     <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', borderRadius: 4, background: sev === 'critical' ? 'var(--km-danger-glow)' : sev === 'warning' ? 'var(--km-warn-glow)' : 'transparent' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: sev === 'critical' ? 'var(--km-danger)' : sev === 'warning' ? 'var(--km-warn)' : 'var(--km-healthy)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 9, fontWeight: 600 }}>{n.label}</span>
+                        <span style={{ marginLeft: 'auto', fontFamily: 'var(--km-mono)', fontSize: 8, color: 'var(--km-dim)' }}>CPU {n.cpu?.toFixed(0)}%</span>
+                     </div>
+                  );
+               })}
+               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
+                  {(state.graph.edges || []).slice(0, 6).map((e, i) => (
+                     <span key={i} style={{ fontFamily: 'var(--km-mono)', fontSize: 7, padding: '1px 4px', borderRadius: 2, background: e.hot ? 'var(--km-danger-glow)' : 'var(--km-surface)', color: e.hot ? 'var(--km-danger)' : 'var(--km-muted)' }}>
+                        {e.source}→{e.target}
+                     </span>
+                  ))}
                </div>
             </div>
           </div>

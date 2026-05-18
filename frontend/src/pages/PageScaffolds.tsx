@@ -567,9 +567,37 @@ export const DigitalTwinLab = ({ state }: { state: ClusterState }) => (
       </div>
     </Panel>
     <Panel title="SIMULATION VIEWPORT" icon={Activity}>
-      <div style={{ padding: 12, background: 'var(--km-surface-alt)', borderRadius: 8, textAlign: 'center' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--km-accent)' }}>Digital Twin Active</div>
-        <div style={{ fontSize: 9, color: 'var(--km-dim)', marginTop: 4 }}>{state?.pods?.length || 0} pods · {state?.anomalies?.length || 0} anomalies</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <div style={{ padding: 8, background: 'var(--km-surface-alt)', borderRadius: 6, textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--km-accent)' }}>{state?.pods?.length || 0}</div>
+            <div style={{ fontSize: 8, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)' }}>PODS</div>
+          </div>
+          <div style={{ padding: 8, background: 'var(--km-surface-alt)', borderRadius: 6, textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: (state?.health?.anomaly_count || 0) > 0 ? 'var(--km-danger)' : 'var(--km-healthy)' }}>{state?.health?.anomaly_count || 0}</div>
+            <div style={{ fontSize: 8, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)' }}>ANOMALIES</div>
+          </div>
+        </div>
+        {state?.anomaly_mode && (
+          <div style={{ padding: 8, background: 'var(--km-warn-glow)', borderRadius: 6, border: '1px solid var(--km-warn)' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--km-warn)', marginBottom: 4 }}>ACTIVE SCENARIO</div>
+            <div style={{ fontSize: 8, fontFamily: 'var(--km-mono)', color: 'var(--km-dim)' }}>
+              {state.anomaly_mode.replace(/_/g, ' ').toUpperCase()}
+            </div>
+            <div style={{ marginTop: 4, height: 3, background: 'var(--km-border)', borderRadius: 1.5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, state.correlations.length * 33)}%`, background: 'var(--km-warn)', borderRadius: 1.5, transition: 'width 1s ease' }} />
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: 8, color: 'var(--km-muted)', fontFamily: 'var(--km-mono)' }}>
+          {(state?.correlations || []).slice(0, 3).map((c: any, i: number) => (
+            <div key={i} style={{ padding: '4px 6px', marginBottom: 4, background: 'var(--km-surface-alt)', borderRadius: 4, borderLeft: '2px solid var(--km-danger)' }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>{c.name}</div>
+              <div>{c.causal_chain?.join(' → ')}</div>
+            </div>
+          ))}
+          {!(state?.correlations?.length) && <div className="empty-state-text">No active simulations</div>}
+        </div>
       </div>
     </Panel>
     <Panel title="PROPAGATION ENGINE" icon={Zap}>

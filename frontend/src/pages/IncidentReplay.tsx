@@ -63,12 +63,32 @@ export function IncidentReplay({ state }: { state: ClusterState }) {
         }));
         setPersistedEvents(events);
         setLastFetch(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+        setLoading(false);
+        return;
       }
     } catch {
-      // Backend not reachable — use live state only
+      // Backend not reachable — fall through to local state
     }
+    const local: TimelineEvent[] = (state?.correlations || []).map((c: any) => ({
+      time:   fmtTime(c.timestamp || Date.now() / 1000),
+      color:  colorFromSeverity(c.severity || 'WARNING'),
+      phase:  phaseFromSeverity(c.severity || 'WARNING'),
+      title:  c.name || c.rule_id || 'Local incident',
+      detail: c.summary || `Chain: ${(c.causal_chain || []).join(' → ')}`,
+      source: 'incident' as const,
+    }));
+    const anomalyEvents: TimelineEvent[] = (state?.anomalies || []).map((a: any) => ({
+      time:   fmtTime(a.timestamp || Date.now() / 1000),
+      color:  colorFromSeverity(a.severity || 'WARNING'),
+      phase:  0,
+      title:  `${a.pod_name} — ${a.metric}`,
+      detail: a.message,
+      source: 'anomaly' as const,
+    }));
+    setPersistedEvents([...local, ...anomalyEvents]);
+    setLastFetch(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
     setLoading(false);
-  }, [selectedNamespace]);
+  }, [selectedNamespace, state?.correlations, state?.anomalies]);
 
   const handleExport = useCallback(async () => {
     setIsExporting(true);

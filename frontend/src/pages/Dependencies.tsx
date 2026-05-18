@@ -8,6 +8,7 @@ const SEV_BG: Record<string, string> = { normal: 'rgba(34,197,94,0.08)', warning
 
 export function Dependencies({ state }: { state: ClusterState }) {
   const { graph, pods, correlations } = state;
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   const option = React.useMemo(() => {
     if (!graph.nodes.length) return {};
@@ -31,7 +32,7 @@ export function Dependencies({ state }: { state: ClusterState }) {
     const eEdges = graph.edges.map((e, i) => ({
       id: String(i), source: e.source, target: e.target,
       lineStyle: {
-        color: e.hot ? '#EF4444' : '#CBD5E1',
+        color: e.hot ? '#EF4444' : (isDark ? '#475569' : '#CBD5E1'),
         width: e.hot ? 2.5 : 1,
         type: e.hot ? 'solid' as const : 'dashed' as const,
         curveness: 0.15,
@@ -47,13 +48,16 @@ export function Dependencies({ state }: { state: ClusterState }) {
         symbolSize: 3,
       } : undefined,
     }));
+    const bgColor = isDark ? '#1E293B' : '#FFFFFF';
+    const textColor = isDark ? '#E2E8F0' : '#0F172A';
+    const borderColor = isDark ? '#334155' : '#E2E8F0';
     return {
       backgroundColor: 'transparent',
       tooltip: {
         trigger: 'item' as const,
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
-        textStyle: { color: '#0F172A', fontSize: 11 },
+        backgroundColor: bgColor,
+        borderColor: borderColor,
+        textStyle: { color: textColor, fontSize: 11 },
       },
       series: [{
         type: 'graph', layout: 'force', data: eNodes, edges: eEdges,
@@ -62,7 +66,7 @@ export function Dependencies({ state }: { state: ClusterState }) {
         emphasis: { focus: 'adjacency' as const },
       }],
     };
-  }, [graph.nodes, graph.edges]);
+  }, [graph.nodes, graph.edges, isDark]);
 
   const barClass = (pct: number) => pct > 80 ? 'high' : pct > 50 ? 'mid' : 'low';
 

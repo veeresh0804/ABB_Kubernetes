@@ -291,13 +291,16 @@ class ClusterSimulator:
             # Replicate restarts for twin realism
             if status in ("CrashLoopBackOff", "OOMKilled"): self.restarts[pid] += 1
 
+            mem_limit = pod["base_memory"] * 3.5
+            mem_pct = round(min(memory / max(mem_limit, 1), 1.0) * 100, 1)
             metric = {
                 "pod_id": pid, "pod_name": pod["name"], "namespace": pod["namespace"],
                 "node": pod["node"], "image": pod["image"], "labels": pod["labels"],
                 "status": status, "replicas": pod["replicas"], "restarts": self.restarts[pid],
                 "cpu_percent": round(max(0.1, min(cpu, 100.0)), 2),
                 "memory_mb": round(max(10.0, memory), 1),
-                "memory_limit_mb": pod["base_memory"] * 3.5,
+                "memory_limit_mb": mem_limit,
+                "memory_pct": mem_pct,
                 "network_in_mbps": round(max(0, net_in), 3), "network_out_mbps": round(max(0, net_out), 3),
                 "pvc_read_mbps": round(max(0, pvc_r), 3), "pvc_write_mbps": round(max(0, pvc_w), 3),
                 "latency_ms": round(max(1.0, latency), 1),

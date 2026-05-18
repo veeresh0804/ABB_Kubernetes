@@ -852,9 +852,33 @@ export function useCluster() {
     } catch { return { status: 'error', message: 'Backend unavailable' }; }
   };
 
+  function localNlpResponse(q: string): string {
+    const st = simStateRef.current;
+    const lq = q.toLowerCase();
+    if (lq.includes('slow') || lq.includes('frontend') || lq.includes('why'))
+      return `**Frontend slowdown analysis:** Current latency across services: ${st.pods.map((p: any) => `${p.pod_name} ${p.latency_ms?.toFixed(0) || '?'}ms`).join(', ')}. ${st.correlations.length > 0 ? `AI has identified a causal chain: ${st.correlations[0].causal_chain?.join(' → ')}.` : 'No confirmed causal chain yet.'}`;
+    if (lq.includes('cpu') || lq.includes('memory') || lq.includes('resource'))
+      return `**Resource analysis:** ${st.pods.map((p: any) => `${p.pod_name}: CPU ${p.cpu_percent?.toFixed(0) || '?'}%, MEM ${((p.memory_mb / Math.max(p.memory_limit_mb, 1)) * 100).toFixed(0) || '?'}%`).join(' | ')}. Health score: ${st.health.score}/100.`;
+    if (lq.includes('root') || lq.includes('cause') || lq.includes('why'))
+      return st.correlations.length > 0
+        ? `**Root cause identified:** ${st.correlations[0].name}. Origin: ${st.correlations[0].root_cause_pod}. Chain: ${st.correlations[0].causal_chain?.join(' → ')}. ${st.correlations[0].summary}`
+        : `**No root cause identified.** Cluster operating normally. ${st.anomalies.length > 0 ? `${st.anomalies.length} anomalies detected but no causal chain confirmed yet.` : ''}`;
+    if (lq.includes('health') || lq.includes('status') || lq.includes('overview'))
+      return `**Cluster health:** Score ${st.health.score}/100 (${st.health.status}). ${st.health.pod_count} pods, ${st.health.anomaly_count} anomalies, ${st.correlations.length} active incidents. ${st.predictions?.length || 0} predictions active.`;
+    if (lq.includes('fix') || lq.includes('recommend') || lq.includes('solution'))
+      return st.correlations.length > 0
+        ? `**Recommendations:** ${st.correlations.map((c: any) => (c.recommendations || []).join(', ')).join(' | ')}`
+        : '**No active issues require remediation.** All systems nominal. Consider enabling proactive HPA and resource limits.';
+    if (lq.includes('scenario') || lq.includes('simulate') || lq.includes('demo'))
+      return `**Demo scenarios available:** PVC Cascade, Memory Leak, CPU Storm, Network Partition, Node Failure, Cert Expiry, Config Drift, DNS Failure. Click any scenario button in the header to trigger a realistic infrastructure failure with full AI-driven causal analysis.`;
+    if (lq.includes('agent') || lq.includes('ai'))
+      return `**Active AI agents:** ${st.agents.map((a: any) => `${a.icon} ${a.agent} (${a.status})`).join(' | ')}. Avg confidence: ${st.agents.length > 0 ? (st.agents.reduce((s: number, a: any) => s + a.confidence, 0) / st.agents.length * 100).toFixed(0) : '?'}%.`;
+    return `I analyzed your query against current cluster state. Cluster health is **${st.health.score}/100** with **${st.health.anomaly_count} anomalies** and **${st.correlations.length} confirmed incidents**. Try asking about: resources, root cause, health, recommendations, agents, or available scenarios.`;
+  }
+
   const nlpQuery = async (question: string) => {
     if (modeRef.current !== 'LIVE') {
-      return { answer: `[Simulation Mode] KubeMind AI is operating in fallback mode. The backend service is currently unavailable. Question received: "${question}"` };
+      return { answer: localNlpResponse(question), question, timestamp: Date.now() / 1000, sources: ['simulation-engine'], severity: 'INFO', confidence: 0.75 };
     }
     try {
       const r = await fetch(`${API_URL}/api/nlp/query`, {
