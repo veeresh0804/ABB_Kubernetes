@@ -8,7 +8,7 @@ import json
 import time
 from typing import List, Set, Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header # FIX: Added Depends, Header for API Key Auth
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -40,6 +40,14 @@ from engines.decision_engine import decision_engine
 
 
 background_tasks = set()
+
+# ─── API Key Authentication ───────────────────────────────────────────────────
+API_KEY = os.getenv("KM_API_KEY", "supersecret-kubemind-key") # FIX: Get API key from env or default
+
+async def get_api_key(x_api_key: str = Header(...)): # FIX: API Key dependency
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized - Invalid API Key")
+    return x_api_key
 
 # ─── App Lifecycle ────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -199,7 +207,8 @@ async def websocket_publisher_worker():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # FIX S-002: Use explicit origins instead of wildcard with credentials
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(','),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -388,7 +397,7 @@ class NLPQuery(BaseModel):
     namespace: Optional[str] = "all"
 
 @app.post("/api/nlp/query")
-async def api_nlp_query(body: NLPQuery):
+async def api_nlp_query(body: NLPQuery, api_key: str = Depends(get_api_key)): # FIX: Add API key auth
     state = await state_engine.get_state()
     metrics = state.get("pods", []); anomalies = state.get("anomalies", [])
     corr = state.get("correlations", []); agents = state.get("agents", [])
@@ -405,7 +414,7 @@ async def api_nlp_query(body: NLPQuery):
 class AnomalyTrigger(BaseModel): scenario: str
 
 @app.post("/api/simulate/anomaly")
-async def api_simulate_anomaly(body: AnomalyTrigger):
+async def api_simulate_anomaly(body: AnomalyTrigger, api_key: str = Depends(get_api_key)): # FIX: Add API key auth
     if body.scenario == "clear":
         simulator.clear_anomaly()
         return {"status": "cleared", "message": "All anomalies cleared"}
@@ -420,20 +429,20 @@ class RemediationRequest(BaseModel):
     action: str; target: str; namespace: str; replicas: Optional[int] = None
 
 @app.post("/api/remediate")
-async def api_remediate(body: RemediationRequest):
+async def api_remediate(body: RemediationRequest, api_key: str = Depends(get_api_key)): # FIX: Add API key auth
     result = await kube_driver.execute_remediation(action=body.action, target=body.target, namespace=body.namespace, replicas=body.replicas)
     metric_store.save_remediation(action=body.action, target=body.target, namespace=body.namespace, status=result.get("status", "unknown"), message=result.get("message", ""))
     if result["status"] == "error": raise HTTPException(status_code=500, detail=result["message"])
     return result
 
 @app.post("/api/demo/reset")
-async def api_demo_reset():
+async def api_demo_reset(api_key: str = Depends(get_api_key)): # FIX: Add API key auth
     simulator.reset(); metric_store.clear_all(); global incident_log; incident_log = []
     return {"status": "success"}
 
 class ModeUpdate(BaseModel): mode: str
 @app.post("/api/stabilization/mode")
-async def api_set_mode(body: ModeUpdate):
+async def api_set_mode(body: ModeUpdate, api_key: str = Depends(get_api_key)): # FIX: Add API key auth
     global stabilization_mode; stabilization_mode = body.mode
     return {"status": "success", "mode": stabilization_mode}
 

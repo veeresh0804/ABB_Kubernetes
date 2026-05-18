@@ -131,6 +131,13 @@ Validated for enterprise-grade deployments:
 - ✅ **Stability:** Automatic temporal smoothing of predictions.
 - ✅ **Trust:** Visible uncertainty and evidence-grounded reasoning.
 
+## 🔒 Security Considerations
+
+For production deployments, strict security measures are paramount:
+- **HTTPS/TLS**: Always deploy KubeMind AI behind a reverse proxy (e.g., Nginx, Traefik) that enforces HTTPS/TLS for all traffic (HTTP and WebSockets). This encrypts data in transit and protects against eavesdropping.
+- **API Key Protection**: All write-enabled POST endpoints (e.g., `/api/remediate`, `/api/simulate/anomaly`) are protected by an `X-API-Key` header. Ensure `KM_API_KEY` environment variable is set to a strong, unique value in production and never exposed client-side.
+- **CORS Configuration**: Configure `CORS_ORIGINS` environment variable to explicitly list trusted frontend domains to prevent unauthorized cross-origin requests.
+
 ---
 
 ## 📄 License
