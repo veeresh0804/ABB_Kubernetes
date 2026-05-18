@@ -108,7 +108,8 @@ async def telemetry_worker():
 
             if enriched_metrics: # Publish enriched metrics
                 await event_bus.publish("TelemetryMetricsEvent", events.TelemetryMetricsEvent(metrics=enriched_metrics, namespace="all"))
-            trend_engine.update(all_metrics) # Original update, still useful for trend_engine's internal history
+            trend_engine.update(all_metrics)
+            metric_store.save_metrics(simulator.tick, enriched_metrics) # FIX DB-001: Save metrics to persistent store
         except Exception as e:
             print(f"Error in telemetry_worker: {e}")
         await asyncio.sleep(2)
@@ -125,6 +126,7 @@ async def anomaly_worker():
                     pod = next((p for p in event.metrics if p["pod_id"] == anomaly["pod_id"]), None)
                     if pod: anomaly["namespace"] = pod["namespace"]
                 await event_bus.publish("AnomalyEvent", events.AnomalyEvent(anomaly=anomaly))
+            metric_store.save_anomalies(anomalies) # FIX DB-001: Save anomalies to persistent store
         except Exception as e:
             print(f"Error in anomaly_worker: {e}")
 

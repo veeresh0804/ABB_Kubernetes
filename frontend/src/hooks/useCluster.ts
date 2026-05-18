@@ -1,105 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { applyTransition } from './useConnectionState';
 import { useEventLog } from './useEventLog';
-
-/* ─── Types ─── */
-export interface PodMetric {
-  pod_id: string; pod_name: string; namespace: string;
-  node: string; image: string; status: string;
-  cpu_percent: number; memory_mb: number; memory_limit_mb: number;
-  memory_pct: number; network_in_mbps: number; network_out_mbps: number;
-  pvc_read_mbps: number; pvc_write_mbps: number;
-  latency_ms: number; restarts: number; replicas: number; timestamp: number;
-  trends?: Record<string, 'increasing' | 'decreasing' | 'stable'>;
-  recent_logs?: string;
-}
-
-export interface Anomaly {
-  pod_id: string; pod_name: string; metric: string;
-  value: number | string; severity: 'CRITICAL'|'WARNING'|'INFO';
-  threshold: number; message: string; timestamp: number;
-}
-
-export interface GraphNode {
-  id: string; label: string; tier: string; node: string;
-  status: string; severity: 'normal'|'warning'|'critical';
-  cpu: number; memory_pct: number; restarts: number;
-}
-
-export interface GraphEdge {
-  source: string; target: string; type: string; protocol: string; weight: number; hot: boolean;
-}
-
-export interface Graph {
-  nodes: GraphNode[]; edges: GraphEdge[];
-}
-
-export interface Correlation {
-  rule_id: string; name: string; summary: string; severity: 'CRITICAL'|'WARNING';
-  root_cause_pod?: string; root_metric?: string;
-  causal_chain: string[]; affected_pods: string[]; recommendations: string[];
-  version?: number;
-  reasoning_audit_trail?: any[];
-  causal_evidence?: any;
-  strategies?: any[];
-}
-
-export interface AgentInsight {
-  agent: string; icon: string; domain: string; status: string;
-  finding: string; confidence: number; reasoning: string[]; recommendation: string;
-  detail: Record<string,any>; timestamp: number; buffer_action?: string;
-  trust_score?: number;
-  governance?: {
-    avg_latency_ms: number;
-    health: string;
-    state: string;
-    cycle_count: number;
-  };
-}
-
-export interface ClusterHealth {
-  score: number; status: string; pod_count: number;
-  anomaly_count: number; critical_count: number; warning_count: number;
-}
-
-export interface ConnectionStatus {
-  backend: 'connected' | 'reconnecting' | 'disconnected';
-  websocket: 'connected' | 'reconnecting' | 'disconnected';
-  prometheus: 'connected' | 'disconnected' | 'simulated';
-  kubernetes: 'connected' | 'disconnected' | 'simulated';
-  fallback: boolean;
-}
-
-export interface ClusterState {
-  health: ClusterHealth;
-  pods: PodMetric[];
-  anomalies: Anomaly[];
-  graph: Graph;
-  correlations: Correlation[];
-  agents: AgentInsight[];
-  predictions: any[];
-  sparkline?: number[];
-  anomaly_mode: string | null;
-  stabilization_mode?: 'OBSERVE' | 'RECOMMEND' | 'APPROVE' | 'STABILIZE';
-  tick: number;
-  connected: boolean;
-  connection: ConnectionStatus;
-}
-
-export type ConnectionMode =
-  | 'BOOTING'
-  | 'CONNECTING'
-  | 'LIVE'
-  | 'DEGRADED'
-  | 'SIMULATION'
-  | 'RECONNECTING';
-
-export interface ConnectionEvent {
-  id: number;
-  timestamp: number;
-  type: 'info' | 'success' | 'warning' | 'error';
-  message: string;
-}
+import { useWebSocket } from './useWebSocket'; // FIX F-002: Import new WebSocket hook
+import { useHealthPoller } from './useHealthPoller'; // FIX F-002: Import new Health Poller hook
+import type { PodMetric, Anomaly, GraphNode, GraphEdge, Graph, Correlation, AgentInsight, ClusterHealth, ConnectionStatus, ClusterState, ConnectionMode, ConnectionEvent } from './types';
 
 /* ─── Constants ─── */
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -112,8 +16,8 @@ const SIM_POLL_MS = 10000;
 const HEARTBEAT_STALE_MS = 10000;
 const HEARTBEAT_CHECK_MS = 2000;
 const SIM_TICK_MS = 2000;
-const RECONNECT_BASE_MS = IS_DEV ? 3000 : 1000;
-const RECONNECT_MAX_MS = 30000;
+// const RECONNECT_BASE_MS = IS_DEV ? 3000 : 1000; // Moved to useWebSocket
+// const RECONNECT_MAX_MS = 30000; // Moved to useWebSocket
 
 const EMPTY: ClusterState = {
   health: { score: 100, status: 'loading', anomaly_count: 0, critical_count: 0, warning_count: 0, pod_count: 0 },
@@ -480,19 +384,36 @@ export function useCluster() {
   const simScenarioStartTickRef = useRef(0);
   const liveStateRef = useRef<ClusterState>(EMPTY);
   const lastLiveUpdateRef = useRef(0);
-  const wsRef = useRef<WebSocket | null>(null);
-  const healthFailCountRef = useRef(0);
+  // const wsRef = useRef<WebSocket | null>(null); // FIX F-002: Moved to useWebSocket
+  // const healthFailCountRef = useRef(0); // Moved to useHealthPoller
 
-  const connectingRef = useRef(false);
+  // const connectingRef = useRef(false); // FIX F-002: Moved to useWebSocket
   const reconnectAttemptRef = useRef(0);
+
+  // FIX F-002: Integrate useHealthPoller hook
+  const { startHealthPoll, stopHealthPoll, runHealthCheck } = useHealthPoller({
+    apiUrl: API_URL,
+    bootFailThreshold: BOOT_FAIL_THRESHOLD,
+    bootPollMs: BOOT_POLL_MS,
+    simPollMs: SIM_POLL_MS,
+    addEvent,
+    mode,
+    modeRef,
+    setState,
+    setMode,
+    setDataSource,
+    connectWS,
+    mounted: mountedRef,
+    simStateRef,
+  });
 
   /* Timer refs */
   const simTimerRef = useRef<number | undefined>(undefined);
-  const healthTimerRef = useRef<number | undefined>(undefined);
+  // const healthTimerRef = useRef<number | undefined>(undefined); // Moved to useHealthPoller
   const hbTimerRef = useRef<number | undefined>(undefined);
-  const pingTimerRef = useRef<number | undefined>(undefined);
-  const wsConnectTimerRef = useRef<number | undefined>(undefined);
-  const reconnectTimerRef = useRef<number | undefined>(undefined);
+  // const pingTimerRef = useRef<number | undefined>(undefined); // FIX F-002: Moved to useWebSocket
+  // const wsConnectTimerRef = useRef<number | undefined>(undefined); // FIX F-002: Moved to useWebSocket
+  // const reconnectTimerRef = useRef<number | undefined>(undefined); // FIX F-002: Moved to useWebSocket
 
   /* ── Simulation engine (always running in background) ── */
   const stopSim = useCallback(() => {
@@ -521,229 +442,9 @@ export function useCluster() {
     }, SIM_TICK_MS);
   }, []);
 
-  /* ── WebSocket connect (singleton) ── */
-  const connectWS = useCallback(() => {
-    if (!mountedRef.current) return;
-    if (connectingRef.current) {
-      wsLog('Connect blocked — already connecting');
-      return;
-    }
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsLog('Already connected');
-      return;
-    }
+  /* ── WebSocket Callbacks ── */
 
-    connectingRef.current = true;
-    wsLog('Connecting...');
-
-    /* Clean up previous socket + timers */
-    const prev = wsRef.current;
-    if (prev) {
-      prev.onopen = null;
-      prev.onmessage = null;
-      prev.onclose = null;
-      prev.onerror = null;
-      if (prev.readyState === WebSocket.OPEN || prev.readyState === WebSocket.CONNECTING) {
-        prev.close();
-      }
-    }
-    clearInterval(pingTimerRef.current);
-    pingTimerRef.current = undefined;
-    clearTimeout(wsConnectTimerRef.current);
-    wsConnectTimerRef.current = undefined;
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-
-    const to = setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) {
-        wsLog('Connection timeout');
-        ws.close();
-      }
-    }, 5000);
-
-    ws.onopen = () => {
-      clearTimeout(to);
-      connectingRef.current = false;
-      wsLog('Connected');
-      reconnectAttemptRef.current = 0;
-      lastLiveUpdateRef.current = Date.now();
-      const m = modeRef.current;
-      if (m === 'CONNECTING' || m === 'RECONNECTING') {
-        const next = applyTransition(m, 'WS_OPEN');
-        if (next) {
-          modeRef.current = next;
-          setMode(next);
-        }
-      }
-      if (modeRef.current === 'LIVE') {
-        setDataSource('live');
-        addEvent('success', 'WebSocket connected — live telemetry active');
-      }
-      // Send current namespace on connect
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'set_namespace', namespace: namespaceRef.current }));
-      }
-      pingTimerRef.current = window.setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try { ws.send('{"type":"ping"}'); } catch { /* ignore */ }
-        }
-      }, 15000);
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.type === 'pong') return;
-        lastLiveUpdateRef.current = Date.now();
-        const merged: ClusterState = {
-          ...d, connected: true,
-          connection: {
-            backend: 'connected', websocket: 'connected',
-            prometheus: 'connected', kubernetes: 'connected',
-            fallback: false,
-          },
-        };
-        liveStateRef.current = merged;
-        if (modeRef.current === 'LIVE') {
-          setState(merged);
-        }
-      } catch { /* ignore */ }
-    };
-
-    ws.onclose = (ev) => {
-      clearTimeout(to);
-      connectingRef.current = false;
-      wsLog(`Closed (code=${ev.code})`);
-      clearInterval(pingTimerRef.current);
-      pingTimerRef.current = undefined;
-
-      if (!mountedRef.current) return;
-
-      const m = modeRef.current;
-      const next = applyTransition(m, 'WS_CLOSED');
-      if (next) {
-        modeRef.current = next;
-        setMode(next);
-      }
-      if (next === 'DEGRADED') {
-        addEvent('warning', 'WebSocket disconnected — attempting reconnect');
-        setDataSource('simulated');
-        /* Exponential backoff reconnect */
-        const attempt = reconnectAttemptRef.current;
-        const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt), RECONNECT_MAX_MS);
-        reconnectAttemptRef.current = attempt + 1;
-        wsLog(`Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = window.setTimeout(() => {
-          if (mountedRef.current) connectWS();
-        }, delay);
-      } else if (next === 'SIMULATION') {
-        addEvent('warning', 'Backend unreachable — simulation mode activated');
-        setDataSource('simulated');
-      }
-    };
-
-    ws.onerror = () => {
-      connectingRef.current = false;
-      ws.close();
-    };
-  }, [addEvent]);
-
-  /* ── Health check ── */
-  const runHealthCheck = useCallback(async () => {
-    if (!mountedRef.current) return;
-    try {
-      const res = await fetch(`${API_URL}/api/health`, { signal: AbortSignal.timeout(5000) });
-      if (!res.ok) throw new Error('not ok');
-      const data = await res.json();
-      healthFailCountRef.current = 0;
-
-      const m = modeRef.current;
-      if (m === 'BOOTING') {
-        addEvent('info', 'Backend detected — establishing WebSocket link');
-        const next = applyTransition(m, 'HEALTH_OK');
-        if (next) {
-          modeRef.current = next;
-          setMode(next);
-          setState(prev => ({
-            ...prev,
-            connection: { ...prev.connection, backend: 'connected' },
-          }));
-        }
-        connectWS();
-      } else if (m === 'SIMULATION') {
-        addEvent('info', 'Backend restored — reconnecting telemetry');
-        const next = applyTransition(m, 'RECOVERY_OK');
-        if (next) {
-          modeRef.current = next;
-          setMode(next);
-        }
-        connectWS();
-      } else if (m === 'DEGRADED') {
-        connectWS();
-      }
-      // Update connection status from health response
-      setState(prev => ({
-        ...prev,
-        connection: {
-          ...prev.connection,
-          backend: 'connected',
-          prometheus: data.drivers?.prometheus?.connected ? 'connected' : 'simulated',
-          kubernetes: data.drivers?.kubernetes?.connected ? 'connected' : 'simulated',
-        },
-      }));
-    } catch {
-      healthFailCountRef.current += 1;
-      const m = modeRef.current;
-      const fails = healthFailCountRef.current;
-
-      if (m === 'BOOTING' && fails >= BOOT_FAIL_THRESHOLD) {
-        const next = applyTransition(m, 'FORCE_SIM');
-        if (next) {
-          addEvent('info', 'Starting simulation mode with fallback telemetry');
-          modeRef.current = next;
-          setMode(next);
-          setDataSource('simulated');
-          setState(prev => ({
-            ...simStateRef.current,
-            connection: { ...prev.connection, backend: 'disconnected', websocket: 'disconnected' },
-          }));
-        }
-      } else if ((m === 'DEGRADED' || m === 'RECONNECTING') && fails >= 1) {
-        const next = applyTransition(m, 'HEALTH_FAIL');
-        if (next) {
-          addEvent('warning', 'Backend unreachable — running simulated telemetry');
-          modeRef.current = next;
-          setMode(next);
-          setDataSource('simulated');
-          setState(prev => ({
-            ...simStateRef.current,
-            connection: { ...prev.connection, backend: 'disconnected', websocket: 'disconnected' },
-          }));
-        }
-      } else if (m === 'BOOTING') {
-        setState(prev => ({
-          ...prev,
-          connection: { ...prev.connection, backend: 'disconnected', websocket: 'disconnected' },
-        }));
-      }
-    }
-  }, [connectWS, addEvent]);
-
-  /* ── Health poll lifecycle ── */
-  const startHealthPoll = useCallback((intervalMs: number) => {
-    if (healthTimerRef.current !== undefined) clearInterval(healthTimerRef.current);
-    healthTimerRef.current = window.setInterval(() => runHealthCheck(), intervalMs);
-    runHealthCheck();
-  }, [runHealthCheck]);
-
-  const stopHealthPoll = useCallback(() => {
-    if (healthTimerRef.current !== undefined) {
-      clearInterval(healthTimerRef.current);
-      healthTimerRef.current = undefined;
-    }
-  }, []);
+  /* ── Health check (logic moved to useHealthPoller) ── */
 
   /* ── Heartbeat monitor ── */
   const startHeartbeatMonitor = useCallback(() => {
@@ -767,7 +468,7 @@ export function useCluster() {
         }
       }
     }, HEARTBEAT_CHECK_MS);
-  }, [addEvent]);
+  }, [addEvent, wsRef]);
 
   const stopHeartbeatMonitor = useCallback(() => {
     if (hbTimerRef.current !== undefined) {
@@ -783,7 +484,7 @@ export function useCluster() {
     startHeartbeatMonitor();
 
     // Boot cycle: try every 5s until backend responds
-    healthFailCountRef.current = 0;
+    // healthFailCountRef.current = 0; // Managed by useHealthPoller
     startHealthPoll(BOOT_POLL_MS);
 
     return () => {
@@ -791,39 +492,20 @@ export function useCluster() {
       stopSim();
       stopHealthPoll();
       stopHeartbeatMonitor();
-      clearTimeout(wsConnectTimerRef.current);
-      clearTimeout(reconnectTimerRef.current);
-      clearInterval(pingTimerRef.current);
-      if (wsRef.current) {
-        wsRef.current.onopen = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.onclose = null;
-        wsRef.current.onerror = null;
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      // FIX F-002: WebSocket cleanup moved to useWebSocket
+      // clearInterval(pingTimerRef.current);
+      // clearTimeout(wsConnectTimerRef.current);
+      // clearTimeout(reconnectTimerRef.current);
+      // if (wsRef.current) {
+      //   wsRef.current.onopen = null;
+      //   wsRef.current.onmessage = null;
+      //   wsRef.current.onclose = null;
+      //   wsRef.current.onerror = null;
+      //   wsRef.current.close();
+      //   wsRef.current = null;
+      // }
     };
-  }, [startSim, startHealthPoll, startHeartbeatMonitor, stopSim, stopHealthPoll, stopHeartbeatMonitor]);
-
-  /* ── Adjust health poll interval when mode changes ── */
-  const prevModeRef = useRef<ConnectionMode>('BOOTING');
-  useEffect(() => {
-    if (mode === prevModeRef.current) return;
-    prevModeRef.current = mode;
-
-    if (mode === 'SIMULATION' || mode === 'RECONNECTING') {
-      // Slow polling during simulation
-      stopHealthPoll();
-      startHealthPoll(SIM_POLL_MS);
-    } else if (mode === 'DEGRADED') {
-      // Faster polling in degraded to detect recovery quickly
-      stopHealthPoll();
-      startHealthPoll(BOOT_POLL_MS);
-    } else if (mode === 'LIVE') {
-      stopHealthPoll();
-      startHealthPoll(SIM_POLL_MS);
-    }
-  }, [mode, stopHealthPoll, startHealthPoll]);
+    }, [startSim, startHealthPoll, startHeartbeatMonitor, stopSim, stopHealthPoll, stopHeartbeatMonitor]);
 
   /* ── Actions ── */
   const triggerAnomaly = async (scenario: string) => {
@@ -917,7 +599,7 @@ export function useCluster() {
       wsLog(`Setting namespace to ${namespace}`);
       wsRef.current.send(JSON.stringify({ type: 'set_namespace', namespace }));
     }
-  }, []);
+  }, [wsRef]);
 
   const getIncidentLog = async () => {
     if (modeRef.current !== 'LIVE') {

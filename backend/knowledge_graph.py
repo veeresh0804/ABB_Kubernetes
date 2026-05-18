@@ -12,6 +12,7 @@ import time
 from event_bus import event_bus
 import events
 from data.simulator import DEPENDENCY_EDGES
+from data.k8s_driver import kube_driver # FIX: Import kube_driver
 
 class KnowledgeGraph:
     def __init__(self):
@@ -50,7 +51,7 @@ class KnowledgeGraph:
         self.tasks.clear()
 
     async def update_topology(self, metrics: List[Dict[str, Any]]):
-        """Updates nodes based on fresh telemetry."""
+        """Updates nodes based on fresh telemetry and discovers dependencies if connected to K8s."""
         async with self.lock:
             # We don't remove nodes immediately to preserve historical context
             # during short telemetry gaps.
@@ -73,13 +74,25 @@ class KnowledgeGraph:
                     }
                 }
             
-            self.edges = []
+            # FIX B-005: Integrate real dependency discovery from kube_driver
+            all_edges = []
+            
+            # Start with simulated edges
             for e in DEPENDENCY_EDGES:
-                # Only add edges if both nodes exist in our current knowledge
                 if e["source"] in self.nodes and e["target"] in self.nodes:
-                    # Calculate 'hot' status based on latency or throughput if available
-                    # (Simplified for now)
-                    self.edges.append({**e, "hot": False})
+                    all_edges.append({**e, "source_type": "simulated"}) # Mark source
+            
+            # Add discovered edges if kube_driver is connected
+            if kube_driver.connected:
+                discovered_edges = await kube_driver.discover_dependencies()
+                for e in discovered_edges:
+                    # Only add if nodes exist (discovered might contain stale pods)
+                    if e["source"] in self.nodes and e["target"] in self.nodes:
+                        # Prevent duplicates from simulated edges if real is similar
+                        if not any(ae["source"] == e["source"] and ae["target"] == e["target"] for ae in all_edges):
+                            all_edges.append({**e, "source_type": "discovered"}) # Mark source
+            
+            self.edges = all_edges
 
     async def mark_anomaly(self, anomaly: Dict[str, Any]):
         """Updates node severity based on detected anomalies."""

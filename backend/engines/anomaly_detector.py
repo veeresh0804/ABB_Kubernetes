@@ -14,7 +14,8 @@ THRESHOLDS = {
 }
 
 WINDOWS: Dict[str, Dict[str, deque]] = {}  # pod_id → metric → deque
-
+LAST_SEEN: Dict[str, float] = {} # FIX B-007: Track last seen timestamp for each pod
+TTL_SECONDS = 300 # 5 minutes
 
 def _get_window(pod_id: str, metric: str, maxlen: int = 60) -> deque:
     if pod_id not in WINDOWS:
@@ -37,6 +38,13 @@ def _stddev_anomaly(values: list, current: float, z: float = 2.5) -> bool:
 
 def detect(metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     anomalies = []
+    now = time.time()
+    
+    # FIX B-007: Update last seen for active pods
+    active_pods_in_metrics = {m["pod_id"] for m in metrics}
+    for pid in active_pods_in_metrics:
+        LAST_SEEN[pid] = now
+
     for m in metrics:
         pid = m["pod_id"]
         memory_pct = round(m["memory_mb"] / max(m["memory_limit_mb"], 1) * 100, 1)
@@ -88,6 +96,19 @@ def detect(metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "timestamp": m.get("timestamp", time.time()),
                 "message":  f"{m['pod_name']} status is {status}",
             })
+    
+    # FIX B-007: Evict stale pods
+    stale_pods = []
+    for pid, last_seen_time in LAST_SEEN.items():
+        if now - last_seen_time > TTL_SECONDS:
+            stale_pods.append(pid)
+    
+    for pid in stale_pods:
+        if pid in WINDOWS:
+            del WINDOWS[pid]
+        if pid in LAST_SEEN:
+            del LAST_SEEN[pid]
+
 
     # Deduplicate: keep highest severity per pod+metric
     seen = {}

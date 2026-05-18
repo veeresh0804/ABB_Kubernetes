@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, AlertTriangle } from 'lucide-react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { DiagnosticPanel } from './DiagnosticPanel';
@@ -58,6 +58,26 @@ export function Layout({
 
         {/* Header */}
         <Header state={state} theme={theme} onToggleTheme={onToggleTheme} />
+
+        {/* FIX DA-002: Simulation Mode Banner */}
+        {dataSource === 'simulated' && (
+            <div style={{
+                background: 'var(--km-warn-glow)',
+                color: 'var(--km-warn)',
+                padding: '8px 20px',
+                textAlign: 'center',
+                fontFamily: 'var(--km-mono)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                borderBottom: '1px solid var(--km-border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+            }}>
+                <AlertTriangle size={14} />
+                SIMULATION MODE ACTIVE — DATA IS NOT LIVE
+                <AlertTriangle size={14} />
+            </div>
+        )}
 
         {/* Scenario Progress Bar */}
         {simScenario && (
