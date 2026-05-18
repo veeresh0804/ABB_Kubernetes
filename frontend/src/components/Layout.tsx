@@ -24,24 +24,26 @@ interface LayoutProps {
 export const NamespaceContext = React.createContext<string>('all');
 
 export function Layout({
-  state, theme, onToggleTheme, children, nlpQuery
+  state, theme, onToggleTheme, children, nlpQuery, selectedNamespace
 }: LayoutProps) {
   return (
-    <div className="aether-layout">
-      <Header state={state} theme={theme} onToggleTheme={onToggleTheme} />
-      
-      <div className="aether-workspace">
-        <Sidebar />
+    <NamespaceContext.Provider value={selectedNamespace || 'all'}>
+      <div className="aether-layout">
+        <Header state={state} theme={theme} onToggleTheme={onToggleTheme} />
         
-        <main className="aether-main">
-          <div className="aether-content">
-            {children}
-          </div>
-          <EventTimeline anomalies={state.anomalies} healthScore={state.health.score} />
-        </main>
+        <div className="aether-workspace">
+          <Sidebar />
+          
+          <main className="aether-main">
+            <div className="aether-content">
+              {children}
+            </div>
+            <EventTimeline anomalies={state.anomalies} healthScore={state.health.score} />
+          </main>
 
-        <AISideHub agents={state.agents} onQuery={nlpQuery} />
+          <AISideHub agents={state.agents} onQuery={nlpQuery} />
+        </div>
       </div>
-    </div>
+    </NamespaceContext.Provider>
   );
 }

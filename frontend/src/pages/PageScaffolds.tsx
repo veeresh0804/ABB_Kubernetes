@@ -4,8 +4,10 @@ import {
   Network, Share2, Activity, Zap, 
   Binary, Database, Microscope,
   ShieldCheck, Heart, Terminal, Search,
-  Target, Fingerprint, History, Cpu, Globe, Brain
+  Target, Fingerprint, History, Cpu, Globe, Brain,
+  BarChart3, Radar, Settings, MessageSquare, TestTube2
 } from 'lucide-react';
+import { CommandCenter as CC } from './CommandCenter/CommandCenter';
 
 const PageWorkspace = ({ title, icon: Icon, children }: { title: string, icon: any, children: React.ReactNode }) => (
   <motion.div 
@@ -240,6 +242,4 @@ export const ReplayStudio = () => (
   </PageWorkspace>
 );
 
-import { BarChart3, Radar, Settings, MessageSquare } from 'lucide-react';
-import { CommandCenter as CC } from './CommandCenter/CommandCenter';
 export const CommandCenter = CC;
