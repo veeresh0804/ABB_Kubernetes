@@ -1,4 +1,5 @@
 """Anomaly detection engine — statistical sliding-window detection."""
+import time
 from typing import List, Dict, Any
 from collections import deque
 import statistics
@@ -44,10 +45,10 @@ def detect(metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         checks = {
             "cpu_percent":    m["cpu_percent"],
             "memory_pct":     memory_pct,
-            "pvc_write_mbps": m["pvc_write_mbps"],
-            "pvc_read_mbps":  m["pvc_read_mbps"],
-            "latency_ms":     m["latency_ms"],
-            "restarts":       m["restarts"],
+            "pvc_write_mbps": m.get("pvc_write_mbps", 0),
+            "pvc_read_mbps":  m.get("pvc_read_mbps", 0),
+            "latency_ms":     m.get("latency_ms", 0),
+            "restarts":       m.get("restarts", 0),
         }
         for metric, value in checks.items():
             w = _get_window(pid, metric)
@@ -70,21 +71,22 @@ def detect(metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "value":    value,
                     "severity": severity,
                     "threshold": thres.get(severity.lower(), value),
-                    "timestamp": m["timestamp"],
+                    "timestamp": m.get("timestamp", time.time()),
                     "message":  _message(pid, metric, value, severity),
                 })
 
         # Status-based anomaly
-        if m["status"] not in ("Running", "Pending"):
+        status = m.get("status", "Running")
+        if status not in ("Running", "Pending"):
             anomalies.append({
                 "pod_id":   pid,
                 "pod_name": m["pod_name"],
                 "metric":   "pod_status",
-                "value":    m["status"],
-                "severity": "CRITICAL" if m["status"] in ("CrashLoopBackOff", "OOMKilled") else "WARNING",
+                "value":    status,
+                "severity": "CRITICAL" if status in ("CrashLoopBackOff", "OOMKilled") else "WARNING",
                 "threshold": "Running",
-                "timestamp": m["timestamp"],
-                "message":  f"{m['pod_name']} status is {m['status']}",
+                "timestamp": m.get("timestamp", time.time()),
+                "message":  f"{m['pod_name']} status is {status}",
             })
 
     # Deduplicate: keep highest severity per pod+metric

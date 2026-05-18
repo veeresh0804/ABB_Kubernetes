@@ -48,10 +48,40 @@ export const CommandCenter: React.FC<{ state: ClusterState }> = ({ state }) => {
   return (
     <div className="command-center">
       <div className="executive-strip">
-        <CognitiveCard label="OPERATIONAL STABILITY" value={`${state.health.score}%`} trend="stable" color="var(--km-healthy)" icon={<Shield size={16} />} confidence={0.98} />
-        <CognitiveCard label="COGNITIVE INTEGRITY" value="OPTIMAL" trend="up" color="var(--km-accent)" icon={<Brain size={16} />} confidence={0.94} />
-        <CognitiveCard label="PREDICTION CONFIDENCE" value="92.4%" trend="up" color="var(--km-warn)" icon={<Target size={16} />} confidence={0.89} />
-        <CognitiveCard label="BLAST RADIUS" value="0.04m" trend="down" color="var(--km-danger)" icon={<Radar size={16} />} confidence={0.96} />
+        <CognitiveCard
+          label="OPERATIONAL STABILITY"
+          value={`${state.health.score}%`}
+          trend={state.health.score > 80 ? 'up' : 'down'}
+          color="var(--km-healthy)"
+          icon={<Shield size={16} />}
+          confidence={0.98}
+        />
+        <CognitiveCard
+          label="ACTIVE ANOMALIES"
+          value={String(state.health.anomaly_count)}
+          trend={state.health.anomaly_count === 0 ? 'stable' : 'down'}
+          color={state.health.critical_count > 0 ? 'var(--km-danger)' : 'var(--km-warn)'}
+          icon={<Brain size={16} />}
+          confidence={0.94}
+        />
+        <CognitiveCard
+          label="AI CONFIDENCE"
+          value={state.agents.length > 0
+            ? `${Math.round(state.agents.reduce((s: number, a: any) => s + a.confidence, 0) / state.agents.length * 100)}%`
+            : '—'}
+          trend="stable"
+          color="var(--km-warn)"
+          icon={<Target size={16} />}
+          confidence={0.89}
+        />
+        <CognitiveCard
+          label="PODS MONITORED"
+          value={String(state.health.pod_count)}
+          trend="stable"
+          color="var(--km-accent)"
+          icon={<Radar size={16} />}
+          confidence={0.96}
+        />
       </div>
 
       <div className="workspace-fabric">

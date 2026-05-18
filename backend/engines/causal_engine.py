@@ -6,6 +6,7 @@ Uses the Knowledge Graph to distinguish between 'root causes' and 'symptoms'
 by analyzing dependency propagation paths.
 """
 import asyncio
+import uuid
 from typing import List, Dict, Any, Set
 import time
 
@@ -74,7 +75,7 @@ class CausalEngine:
             prev_id = prev.get("event_id")
 
         incident = {
-            "event_id": str(uuid.uuid4()) if 'uuid' in globals() else f"EV-{int(time.time())}",
+            "event_id": str(uuid.uuid4()),
             "rule_id": f"CAUSAL-{root_pod_id}",
             "name": f"Cognitive Outage Model: {root_anomaly['metric']} (v{version})",
             "summary": f"Inferred root cause in {root_pod_id} (Centrality: {score}). Cascading symptoms across {len(affected_pods)-1} services.",
@@ -100,7 +101,7 @@ class CausalEngine:
         self.active_incidents[root_pod_id] = incident
         return [incident]
 
-import uuid # Ensure uuid is available for event_id generation
+# uuid import moved to top of file
 
 # Singleton instance
 causal_engine = CausalEngine()

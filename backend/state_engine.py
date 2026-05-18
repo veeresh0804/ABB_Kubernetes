@@ -6,6 +6,7 @@ It subscribes to the event bus, updates the internal state cache,
 and provides thread-safe access to this state.
 """
 import asyncio
+import copy
 from typing import Dict, Any, List
 import time
 
@@ -67,76 +68,146 @@ class StateEngine:
         prediction_queue = event_bus.subscribe("PredictionEvent")
         feedback_queue = event_bus.subscribe("CognitiveFeedbackEvent")
         strategy_queue = event_bus.subscribe("StrategyEvent")
+        topology_trigger_queue = event_bus.subscribe("TelemetryMetricsEvent")
 
         async def consume_telemetry():
             while self.running:
-                event: events.TelemetryMetricsEvent = await telemetry_queue.get()
-                async with STATE_LOCK:
-                    STATE_CACHE["pods"] = event.metrics
-                    if event.metrics:
-                        STATE_CACHE["tick"] = event.metrics[0].get("tick", STATE_CACHE["tick"])
-                    STATE_CACHE["anomaly_mode"] = simulator.anomaly_mode
-                    
-                    health = _cluster_health(event.metrics, STATE_CACHE["anomalies"])
-                    STATE_CACHE["health"] = health
+                try:
+                    event: events.TelemetryMetricsEvent = await telemetry_queue.get()
+                    async with STATE_LOCK:
+                        STATE_CACHE["pods"] = event.metrics
+                        if event.metrics:
+                            STATE_CACHE["tick"] = event.metrics[0].get("tick", STATE_CACHE["tick"])
+                        STATE_CACHE["anomaly_mode"] = simulator.anomaly_mode
+                        
+                        health = _cluster_health(event.metrics, STATE_CACHE["anomalies"])
+                        STATE_CACHE["health"] = health
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_telemetry error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_anomalies():
             local_anomaly_buffer = []
             while self.running:
-                event: events.AnomalyEvent = await anomaly_queue.get()
-                local_anomaly_buffer.append(event.anomaly)
-                if len(local_anomaly_buffer) > 100:
-                    local_anomaly_buffer.pop(0)
-                async with STATE_LOCK:
-                    STATE_CACHE["anomalies"] = list(local_anomaly_buffer)
+                try:
+                    event: events.AnomalyEvent = await anomaly_queue.get()
+                    local_anomaly_buffer.append(event.anomaly)
+                    if len(local_anomaly_buffer) > 100:
+                        local_anomaly_buffer.pop(0)
+                    async with STATE_LOCK:
+                        STATE_CACHE["anomalies"] = list(local_anomaly_buffer)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_anomalies error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_correlations():
+            correlation_map = {}
             while self.running:
-                event: events.CorrelationEvent = await correlation_queue.get()
-                async with STATE_LOCK:
-                    STATE_CACHE["correlations"] = [event.correlation]
+                try:
+                    event: events.CorrelationEvent = await correlation_queue.get()
+                    c = event.correlation
+                    # Add timestamp to correlation if missing
+                    if "timestamp" not in c:
+                        c["timestamp"] = time.time()
+                    rule_id = c.get("rule_id", c.get("event_id", str(time.time())))
+                    correlation_map[rule_id] = c
+                    # Prune correlations older than 5 minutes
+                    now = time.time()
+                    correlation_map = {
+                        k: v for k, v in correlation_map.items()
+                        if now - v.get("timestamp", now) < 300
+                    }
+                    async with STATE_LOCK:
+                        STATE_CACHE["correlations"] = list(correlation_map.values())
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_correlations error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_agent_insights():
             agent_map = {}
             while self.running:
-                event: events.AgentInsightEvent = await agent_queue.get()
-                agent_name = event.insight["agent"]
-                agent_map[agent_name] = event.insight
-                
-                async with STATE_LOCK:
-                    STATE_CACHE["agents"] = list(agent_map.values())
+                try:
+                    event: events.AgentInsightEvent = await agent_queue.get()
+                    agent_name = event.insight["agent"]
+                    agent_map[agent_name] = event.insight
+                    
+                    async with STATE_LOCK:
+                        STATE_CACHE["agents"] = list(agent_map.values())
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_agent_insights error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_predictions():
             local_prediction_map = {} # pod_id:metric -> prediction
             while self.running:
-                event: events.PredictionEvent = await prediction_queue.get()
-                p = event.prediction
-                key = f"{p['pod_id']}:{p['metric']}"
-                local_prediction_map[key] = p
-                
-                async with STATE_LOCK:
-                    sorted_p = sorted(local_prediction_map.values(), key=lambda x: x["ttf_minutes"])
-                    STATE_CACHE["predictions"] = sorted_p[:5]
+                try:
+                    event: events.PredictionEvent = await prediction_queue.get()
+                    p = event.prediction
+                    key = f"{p['pod_id']}:{p['metric']}"
+                    local_prediction_map[key] = p
+                    
+                    async with STATE_LOCK:
+                        sorted_p = sorted(local_prediction_map.values(), key=lambda x: x["ttf_minutes"])
+                        STATE_CACHE["predictions"] = sorted_p[:5]
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_predictions error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_feedback():
             while self.running:
-                event: events.CognitiveFeedbackEvent = await feedback_queue.get()
-                async with STATE_LOCK:
-                    for agent in event.impacted_agents:
-                        current = STATE_CACHE["agent_trust_scores"].get(agent, 0.85)
-                        new_score = (current * 0.9) + (event.accuracy_score * 0.1)
-                        STATE_CACHE["agent_trust_scores"][agent] = round(new_score, 3)
+                try:
+                    event: events.CognitiveFeedbackEvent = await feedback_queue.get()
+                    async with STATE_LOCK:
+                        for agent in event.impacted_agents:
+                            current = STATE_CACHE["agent_trust_scores"].get(agent, 0.85)
+                            new_score = (current * 0.9) + (event.accuracy_score * 0.1)
+                            STATE_CACHE["agent_trust_scores"][agent] = round(new_score, 3)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_feedback error: {e}")
+                    await asyncio.sleep(0.1)
 
         async def consume_strategies():
             while self.running:
-                event: events.StrategyEvent = await strategy_queue.get()
-                async with STATE_LOCK:
-                    # Map strategy to its parent correlation
-                    STATE_CACHE["active_strategies"][event.correlation_id] = {
-                        "strategies": [s.dict() for s in event.strategies],
-                        "recommended_index": event.recommended_strategy_index,
-                        "timestamp": event.timestamp
-                    }
+                try:
+                    event: events.StrategyEvent = await strategy_queue.get()
+                    async with STATE_LOCK:
+                        # Map strategy to its parent correlation
+                        STATE_CACHE["active_strategies"][event.correlation_id] = {
+                            "strategies": [s.dict() for s in event.strategies],
+                            "recommended_index": event.recommended_strategy_index,
+                            "timestamp": event.timestamp
+                        }
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_strategies error: {e}")
+                    await asyncio.sleep(0.1)
+
+        async def consume_topology():
+            from knowledge_graph import knowledge_graph
+            while self.running:
+                try:
+                    await topology_trigger_queue.get()
+                    topology = await knowledge_graph.get_topology("all")
+                    async with STATE_LOCK:
+                        STATE_CACHE["graph"] = topology
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"[StateEngine] consume_topology error: {e}")
+                    await asyncio.sleep(0.1)
 
         self.tasks.extend([
             asyncio.create_task(consume_telemetry()),
@@ -145,7 +216,8 @@ class StateEngine:
             asyncio.create_task(consume_agent_insights()),
             asyncio.create_task(consume_predictions()),
             asyncio.create_task(consume_feedback()),
-            asyncio.create_task(consume_strategies())
+            asyncio.create_task(consume_strategies()),
+            asyncio.create_task(consume_topology()),
         ])
 
     async def stop(self):
@@ -157,9 +229,9 @@ class StateEngine:
         self.tasks.clear()
 
     async def get_state(self) -> Dict[str, Any]:
-        """Returns a deep copy of the current state."""
+        """Returns a deep copy of the current state to prevent mutation between consumers."""
         async with STATE_LOCK:
-            return {k: v[:] if isinstance(v, list) else v for k, v in STATE_CACHE.items()}
+            return copy.deepcopy(STATE_CACHE)
 
 # Singleton instance
 state_engine = StateEngine()

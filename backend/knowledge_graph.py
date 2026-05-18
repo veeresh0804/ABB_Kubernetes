@@ -55,6 +55,8 @@ class KnowledgeGraph:
             # during short telemetry gaps.
             for m in metrics:
                 pid = m["pod_id"]
+                # Reset severity to normal each topology update; anomaly events will re-escalate
+                current_severity = self.nodes.get(pid, {}).get("severity", "normal")
                 self.nodes[pid] = {
                     "id": pid,
                     "label": m["pod_name"],
@@ -62,7 +64,7 @@ class KnowledgeGraph:
                     "node": m["node"],
                     "status": m["status"],
                     "tier": m.get("labels", {}).get("tier", "unknown"),
-                    "severity": "normal", # Default, updated by anomalies
+                    "severity": "normal",  # Reset; anomaly consumer will re-escalate
                     "last_seen": time.time(),
                     "metrics": {
                         "cpu": m.get("cpu_percent", 0),
@@ -85,13 +87,13 @@ class KnowledgeGraph:
         """Updates node severity based on detected anomalies."""
         async with self.lock:
             pid = anomaly["pod_id"]
-            if pid in self.nodes:
-                current_sev = self.nodes[pid]["severity"]
-                new_sev = anomaly["severity"].lower()
-                
-                # Severity escalation logic
-                if new_sev == "critical" or current_sev == "normal":
-                    self.nodes[pid]["severity"] = new_sev
+            if pid not in self.nodes:
+                return
+            new_sev = anomaly["severity"].lower()
+            current_sev = self.nodes[pid]["severity"]
+            SEV_RANK = {"normal": 0, "warning": 1, "critical": 2}
+            if SEV_RANK.get(new_sev, 0) >= SEV_RANK.get(current_sev, 0):
+                self.nodes[pid]["severity"] = new_sev
 
     async def get_topology(self, namespace: str = "all") -> Dict[str, Any]:
         """Returns the current graph state, filtered by namespace."""

@@ -49,24 +49,29 @@ class PredictiveLayer:
         """
         Performs advanced trend analysis with temporal smoothing and 
         consensus dampening to ensure prediction stability.
+        Reads raw history deques from trend_engine.history directly.
         """
         from engines.anomaly_detector import THRESHOLDS
         from engines.trend_engine import trend_engine
 
         for m in metrics:
             pod_id = m["pod_id"]
-            trends = trend_engine.get_trends(pod_id)
-            if not trends: continue
+            pod_hist = trend_engine.history.get(pod_id, {})
 
-            for metric_name, data in trends.items():
-                if metric_name not in THRESHOLDS: continue
-                
+            for metric_name, deq in pod_hist.items():
+                if not hasattr(deq, '__iter__') or isinstance(deq, str):
+                    continue
+                if metric_name not in THRESHOLDS:
+                    continue
+
                 threshold = THRESHOLDS[metric_name].get("critical")
-                if threshold is None: continue
+                if threshold is None:
+                    continue
 
-                values = data.get("values", [])
-                if len(values) < 15: continue
-                
+                values = list(deq)
+                if len(values) < 15:
+                    continue
+
                 recent = values[-15:]
                 n = len(recent)
                 xs = list(range(n))
@@ -76,13 +81,16 @@ class PredictiveLayer:
                 den = sum((xs[i] - x_mean) ** 2 for i in range(n))
                 slope = num / den if den != 0 else 0
 
-                if slope <= 0: continue
+                if slope <= 0:
+                    continue
 
                 current = recent[-1]
-                if current >= threshold: continue
+                if current >= threshold:
+                    continue
 
                 ticks_to_crit = (threshold - current) / slope
-                if ticks_to_crit <= 0 or ticks_to_crit > 1800: continue
+                if ticks_to_crit <= 0 or ticks_to_crit > 1800:
+                    continue
 
                 raw_ttf = round(ticks_to_crit / self.TICKS_PER_MINUTE, 1)
                 confidence = round(min(0.95, 0.6 + abs(slope) * 10), 2)

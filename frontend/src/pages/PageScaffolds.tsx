@@ -8,6 +8,7 @@ import {
   BarChart3, Radar, Settings, MessageSquare, TestTube2
 } from 'lucide-react';
 import { CommandCenter as CC } from './CommandCenter/CommandCenter';
+import type { ClusterState } from '../hooks/useCluster';
 
 const PageWorkspace = ({ title, icon: Icon, children }: { title: string, icon: any, children: React.ReactNode }) => (
   <motion.div 
@@ -47,21 +48,88 @@ const PanelScaffold = ({ title, icon: Icon, children }: { title: string, icon: a
   </div>
 );
 
-/* COGNITION */
-export const AIMesh = () => (
+/* ───── HELPER: Severity Color ───── */
+const sevColor = (s: string) => s === 'CRITICAL' ? 'var(--km-danger)' : s === 'WARNING' ? 'var(--km-warn)' : 'var(--km-healthy)';
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* COGNITION                                                     */
+/* ═══════════════════════════════════════════════════════════════ */
+export const AIMesh = ({ state }: { state?: ClusterState }) => (
   <PageWorkspace title="AI Mesh Workspace" icon={Network}>
-    <PanelScaffold title="COGNITIVE MESH GRAPH" icon={Share2} />
+    <PanelScaffold title="ACTIVE AGENTS" icon={Share2}>
+      {state && state.agents.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, overflowY: 'auto', height: '100%' }}>
+          {state.agents.map(a => (
+            <div key={a.agent} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '6px 10px', background: 'var(--km-surface-alt)',
+              border: '1px solid var(--km-border)', borderRadius: 6, fontSize: 11
+            }}>
+              <span style={{ fontWeight: 600, flex: 1 }}>{a.icon} {a.agent}</span>
+              <span style={{
+                color: sevColor(a.status),
+                fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700,
+                marginRight: 8
+              }}>{a.status}</span>
+              <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)' }}>
+                {Math.round(a.confidence * 100)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : undefined}
+    </PanelScaffold>
+    <PanelScaffold title="ENSEMBLE WEIGHTING" icon={Activity}>
+      {state && state.agents.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
+          <div style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)', marginBottom: 4 }}>CONFIDENCE DISTRIBUTION</div>
+          {state.agents.slice(0, 5).map(a => (
+            <div key={a.agent} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-muted)', width: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.agent.split(' ')[0]}</span>
+              <div style={{ flex: 1, height: 4, background: 'var(--km-border)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.round(a.confidence * 100)}%`, background: sevColor(a.status), borderRadius: 2, transition: 'width 0.6s' }} />
+              </div>
+              <span style={{ fontFamily: 'var(--km-mono)', fontSize: 8, color: 'var(--km-dim)', width: 28 }}>{Math.round(a.confidence * 100)}%</span>
+            </div>
+          ))}
+        </div>
+      ) : undefined}
+    </PanelScaffold>
     <PanelScaffold title="AGENT NEURAL NETWORK" icon={Binary} />
-    <PanelScaffold title="ENSEMBLE WEIGHTING" icon={Activity} />
     <PanelScaffold title="CONFIDENCE PROPAGATION" icon={Zap} />
     <PanelScaffold title="REASONING EXCHANGE" icon={Terminal} />
     <PanelScaffold title="CONSENSUS MATRIX" icon={Target} />
   </PageWorkspace>
 );
 
-export const PredictionFabric = () => (
+export const PredictionFabric = ({ state }: { state?: ClusterState }) => (
   <PageWorkspace title="Prediction Fabric" icon={Binary}>
-    <PanelScaffold title="MULTI-HORIZON FORECAST" icon={Activity} />
+    <PanelScaffold title="MULTI-HORIZON FORECAST" icon={Activity}>
+      {state && state.predictions && state.predictions.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, overflowY: 'auto', height: '100%' }}>
+          {state.predictions.map((p: any, i: number) => (
+            <div key={i} style={{
+              padding: '8px 10px', background: 'var(--km-surface-alt)',
+              border: '1px solid var(--km-border)', borderRadius: 6,
+              borderLeft: `3px solid ${p.severity === 'CRITICAL' ? 'var(--km-danger)' : 'var(--km-warn)'}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600 }}>
+                <span>{p.pod_name}</span>
+                <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: sevColor(p.severity) }}>{p.severity}</span>
+              </div>
+              <div style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)', marginTop: 4 }}>
+                {p.metric} → TTF: {p.ttf_minutes}min · Conf: {Math.round(p.confidence * 100)}%
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8 }}>
+          <Activity size={24} style={{ color: 'var(--km-healthy)', opacity: 0.3 }} />
+          <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)' }}>NO ACTIVE PREDICTIONS // STABLE</span>
+        </div>
+      )}
+    </PanelScaffold>
     <PanelScaffold title="FUTURE TOPOLOGY STATE" icon={Globe} />
     <PanelScaffold title="INSTABILITY PREDICTION" icon={Zap} />
     <PanelScaffold title="CONFIDENCE DRIFT ANALYSIS" icon={Binary} />
@@ -70,9 +138,29 @@ export const PredictionFabric = () => (
   </PageWorkspace>
 );
 
-export const Governance = () => (
+export const Governance = ({ state }: { state?: ClusterState }) => (
   <PageWorkspace title="Trust & Governance" icon={Fingerprint}>
-    <PanelScaffold title="TRUST CALIBRATION" icon={ShieldCheck} />
+    <PanelScaffold title="TRUST CALIBRATION" icon={ShieldCheck}>
+      {state && state.agents.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, overflowY: 'auto', height: '100%' }}>
+          {state.agents.map(a => (
+            <div key={a.agent} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '6px 10px', background: 'var(--km-surface-alt)',
+              border: '1px solid var(--km-border)', borderRadius: 6
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 600 }}>{a.agent}</span>
+              <span style={{
+                fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700,
+                color: (a.trust_score || 0.85) > 0.9 ? 'var(--km-healthy)' : 'var(--km-warn)'
+              }}>
+                TRUST: {Math.round((a.trust_score || 0.85) * 100)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : undefined}
+    </PanelScaffold>
     <PanelScaffold title="CONFIDENCE QUALITY" icon={Activity} />
     <PanelScaffold title="HALLUCINATION MONITORING" icon={Microscope} />
     <PanelScaffold title="GOVERNANCE POLICIES" icon={Fingerprint} />
@@ -81,10 +169,35 @@ export const Governance = () => (
   </PageWorkspace>
 );
 
-/* INFRASTRUCTURE */
-export const InfrastructureFabric = () => (
+/* ═══════════════════════════════════════════════════════════════ */
+/* INFRASTRUCTURE                                                */
+/* ═══════════════════════════════════════════════════════════════ */
+export const InfrastructureFabric = ({ state }: { state?: ClusterState }) => (
   <PageWorkspace title="Infrastructure Fabric" icon={Network}>
-    <PanelScaffold title="TOPOLOGY INTELLIGENCE" icon={Globe} />
+    <PanelScaffold title="ACTIVE CORRELATIONS" icon={Globe}>
+      {state && (state.correlations || []).length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, overflowY: 'auto', height: '100%' }}>
+          {(state.correlations as any[]).map((c: any, i: number) => (
+            <div key={i} style={{
+              padding: '8px 10px', background: 'var(--km-surface-alt)',
+              border: '1px solid var(--km-border)', borderRadius: 6,
+              borderLeft: `3px solid ${c.severity === 'CRITICAL' ? 'var(--km-danger)' : 'var(--km-warn)'}`
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 3 }}>{c.name}</div>
+              <div style={{ fontSize: 10, color: 'var(--km-secondary)', marginBottom: 4 }}>{c.summary}</div>
+              <div style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)' }}>
+                {c.causal_chain?.join(' → ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 8 }}>
+          <Globe size={24} style={{ color: 'var(--km-healthy)', opacity: 0.3 }} />
+          <span style={{ fontFamily: 'var(--km-mono)', fontSize: 9, color: 'var(--km-dim)' }}>NO ACTIVE INCIDENTS // TOPOLOGY STABLE</span>
+        </div>
+      )}
+    </PanelScaffold>
     <PanelScaffold title="PROPAGATION FLOW" icon={Activity} />
     <PanelScaffold title="DEPENDENCY OVERLAYS" icon={Share2} />
     <PanelScaffold title="BLAST RADIUS VISUAL" icon={Radar} />
@@ -104,7 +217,9 @@ export const NamespaceIntelligence = () => (
   </PageWorkspace>
 );
 
-/* SIMULATION */
+/* ═══════════════════════════════════════════════════════════════ */
+/* SIMULATION                                                    */
+/* ═══════════════════════════════════════════════════════════════ */
 export const DigitalTwinLab = () => (
   <PageWorkspace title="Digital Twin Lab" icon={Microscope}>
     <PanelScaffold title="SCENARIO BUILDER" icon={Settings} />
@@ -127,7 +242,9 @@ export const ScenarioSimulator = () => (
   </PageWorkspace>
 );
 
-/* MEMORY */
+/* ═══════════════════════════════════════════════════════════════ */
+/* MEMORY                                                        */
+/* ═══════════════════════════════════════════════════════════════ */
 export const OperationalMemory = () => (
   <PageWorkspace title="Operational Memory" icon={History}>
     <PanelScaffold title="FINGERPRINT EXPLORER" icon={Fingerprint} />
@@ -150,7 +267,9 @@ export const IncidentArchive = () => (
   </PageWorkspace>
 );
 
-/* INTELLIGENCE */
+/* ═══════════════════════════════════════════════════════════════ */
+/* INTELLIGENCE                                                  */
+/* ═══════════════════════════════════════════════════════════════ */
 export const SemanticLogs = () => (
   <PageWorkspace title="Semantic Log Intelligence" icon={Terminal}>
     <PanelScaffold title="SEMANTIC LOG STREAM" icon={Terminal} />
@@ -173,7 +292,9 @@ export const CausalAnalytics = () => (
   </PageWorkspace>
 );
 
-/* SYSTEM */
+/* ═══════════════════════════════════════════════════════════════ */
+/* SYSTEM                                                        */
+/* ═══════════════════════════════════════════════════════════════ */
 export const CognitiveHealth = () => (
   <PageWorkspace title="Cognitive Health" icon={Heart}>
     <PanelScaffold title="EVENT FABRIC VISUAL" icon={Network} />
@@ -196,7 +317,9 @@ export const AgentLifecycle = () => (
   </PageWorkspace>
 );
 
-/* MISSION CONTROL */
+/* ═══════════════════════════════════════════════════════════════ */
+/* MISSION CONTROL                                               */
+/* ═══════════════════════════════════════════════════════════════ */
 export const ExecutiveOps = () => (
   <PageWorkspace title="Executive Operations" icon={Target}>
     <PanelScaffold title="STRATEGIC RISK" icon={Radar} />
