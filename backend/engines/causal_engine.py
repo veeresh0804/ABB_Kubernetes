@@ -101,6 +101,44 @@ class CausalEngine:
         if not sorted_pods: return []
         
         root_pod_id, score = sorted_pods[0]
-        root_anomaly = next(a for a in fresh_anomalies if a["pod_id"] == root_pod_id)
-        
-        # ... (rest of the incident construction)
+        root_anomaly = next((a for a in fresh_anomalies if a["pod_id"] == root_pod_id), fresh_anomalies[0])
+
+        affected = affected_pods - {root_pod_id}
+        chain = _build_causal_chain(root_pod_id, affected, topology.get("edges", []))
+
+        severity = max((a["severity"] for a in fresh_anomalies if a["pod_id"] == root_pod_id), default="WARNING")
+        severity_score = {"CRITICAL": 3, "WARNING": 2, "INFO": 1}.get(severity, 1)
+
+        recommendations = []
+        if any("memory" in a.get("metric", "") for a in fresh_anomalies):
+            recommendations.append("Review memory limits and check for unbounded cache allocation.")
+            recommendations.append("Consider increasing memory limit or triggering a restart of unhealthy replicas.")
+        if any("cpu" in a.get("metric", "") for a in fresh_anomalies):
+            recommendations.append("Check for CPU contention — review horizontal scaling options.")
+            recommendations.append("Consider enabling HPA with CPU threshold at 60%.")
+        if any("pvc" in a.get("metric", "") for a in fresh_anomalies):
+            recommendations.append("Expand PVC storage IOPS limits or add read replicas to offload I/O.")
+        if not recommendations:
+            recommendations = ["Monitor closely and prepare escalation procedures."]
+
+        incident = {
+            "rule_id": f"causal-{root_pod_id}-{int(now)}",
+            "name": f"{root_pod_id} {root_anomaly.get('metric', 'degradation')} incident",
+            "severity": severity,
+            "root_cause_pod": root_pod_id,
+            "root_metric": root_anomaly.get("metric", "unknown"),
+            "causal_chain": chain,
+            "summary": f"Causal analysis identified {root_pod_id} as root cause (score={score}) with {len(chain)} affected services.",
+            "affected_pods": list(affected),
+            "recommendations": recommendations[:4],
+            "timestamp": now,
+            "causal_evidence": {
+                "upstream_credits": sum(1 for pid, s in pod_scores.items() if s > 0),
+                "downstream_blame": sum(-1 for pid, s in pod_scores.items() if s < 0),
+                "max_score": score,
+            },
+        }
+
+        return [incident]
+
+causal_engine = CausalEngine()
