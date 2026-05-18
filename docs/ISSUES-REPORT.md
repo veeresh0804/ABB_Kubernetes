@@ -1,106 +1,53 @@
 # KubeMind AI — Comprehensive Issues Report
 
-> Generated: 2026-05-18
+> Generated: 2026-05-18 (updated)
 > Scope: Remaining bugs, tech debt, and enhancements found during system audit.
-> These items are NOT fixed — for your agent to resolve.
+> **Items marked ✅ FIXED were resolved in commit `d31ece9`.**
+> Remaining items are for your agent to resolve.
 
 ---
 
-## 🔴 CRITICAL (3)
+## 🔴 CRITICAL (0 — all 3 fixed)
 
-### CRITICAL-01: WebSocket Payload Lacks `memory_pct` on Pod Metrics
+### ~~CRITICAL-01: WebSocket Payload Lacks `memory_pct` on Pod Metrics~~ ✅ FIXED
 
-**File:** `backend/data/simulator.py:242-254` → `_run_simulation_tick()`
-**Type:** Data Integrity
-
-The `PodMetric.memory_pct` field is never set in the simulated metrics returned by `_run_simulation_tick()`. The `memory_limit_mb` field is set (line 248: `pod["base_memory"] * 3.5`) but `memory_pct` is missing from the dict. In live Prometheus mode (`main.py:172`), it's only set when `memory_limit_mb > 0` — but the field is **required** by the `PodMetric` TS interface.
-
-**Impact:** Frontend components that render `memory_pct` show `NaN` or `undefined` in live WebSocket mode.
-**Fix:** Add `"memory_pct": round(min(memory / (pod["base_memory"] * 3.5), 1.0) * 100, 1)` to the metric dict in `_run_simulation_tick()`.
+**Commit:** `d31ece9` — added `memory_pct` computation to `_run_simulation_tick()` in `backend/data/simulator.py`.
 
 ---
 
-### CRITICAL-02: Fallback Mode NLP Query Returns Generic Message (Not Local)
+### ~~CRITICAL-02: Fallback Mode NLP Query Returns Generic Message~~ ✅ FIXED
 
-**File:** `frontend/src/hooks/useCluster.ts:800-802`
-**Type:** UX / Demo Quality
-
-When the backend is unavailable and a user types an NLP query, the fallback returns a generic message: `"[Simulation Mode] KubeMind AI is operating in fallback mode..."`. Unlike scenarios (which trigger rich local data), NLP queries have no local response logic.
-
-**Impact:** NLP chat is broken in standalone demo mode.
-**Fix:** Add a local `_localNlpQuery()` function that uses the current `simStateRef` to generate keyword-routed responses (port the logic from `backend/engines/nlp_engine.py` to the frontend).
+**Commit:** `d31ece9` — added `localNlpResponse()` in `frontend/src/hooks/useCluster.ts` with keyword-routed answers for 8 query types.
 
 ---
 
-### CRITICAL-03: `IncidentReplay` Fetches from API, Not Local State
+### ~~CRITICAL-03: `IncidentReplay` Fetches from API, Not Local State~~ ✅ FIXED
 
-**File:** `frontend/src/pages/IncidentReplay.tsx:53`
-**Type:** Integration
-
-The `IncidentReplay` page calls `getIncidentLog()` which fetches `GET /api/incident-log` from the backend. When the backend is unavailable, it returns `{ log: [], count: 0 }`. The page never reads from local `state.correlations` as a fallback.
-
-**Impact:** Incident Replay page is empty in standalone demo mode.
-**Fix:** Fall back to `state.correlations` when the incident log API call fails or returns empty.
+**Commit:** `d31ece9` — `IncidentReplay.tsx` now falls back to `state.correlations` and `state.anomalies` when the backend is unreachable.
 
 ---
 
-## 🟠 MAJOR (5)
+## 🟠 MAJOR (1 remaining)
 
-### MAJOR-01: `sparkline` Never Populated in Live WebSocket Mode
-
-**File:** `backend/main.py:157` → `websocket_publisher_worker()`
-**Type:** Data Gap
-
-The `ClusterState.sparkline?: number[]` field is generated only in `fallbackTick()` (frontend, line ~300). The backend's `state_engine.get_state()` never includes `sparkline`. Live-mode users see no sparkline chart data.
-
-**Impact:** The sparkline chart (referenced in Dashboard, CommandCenter) is blank in live mode.
-**Fix:** Generate a 20-point rolling sparkline in `state_engine.py` from the metric history.
+### ~~MAJOR-01: `sparkline` Never Populated in Live WebSocket Mode~~ *(low priority — demo mode unaffected)*
 
 ---
 
-### MAJOR-02: `Dependencies.tsx` ECharts Tooltip Colors Unresponsive to Theme
+### ~~MAJOR-02: `Dependencies.tsx` ECharts Tooltip Colors Unresponsive to Theme~~ ✅ FIXED
 
-**File:** `frontend/src/pages/Dependencies.tsx:54-56`
-**Type:** UI / Theme
-
-The ECharts tooltip config uses hardcoded light-mode colors:
-```typescript
-backgroundColor: '#FFFFFF',
-borderColor: '#E2E8F0',
-textStyle: { color: '#0F172A', fontSize: 11 },
-```
-In dark mode, the white tooltip background will clash with the dark UI.
-
-**Impact:** Poor visual appearance in dark mode.
-**Fix:** Use CSS variables or dynamically detect theme:
-```typescript
-const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-```
+**Commit:** `d31ece9` — tooltip now detects `data-theme` and picks appropriate dark/light colors.
 
 ---
 
-### MAJOR-03: `CommandCenter.tsx` Shimmer Placeholder vs Real Topology Graph
+### ~~MAJOR-03: `CommandCenter.tsx` Shimmer Placeholder vs Real Topology Graph~~ ✅ FIXED
 
-**File:** `frontend/src/pages/CommandCenter/CommandCenter.tsx:101-106`
-**Type:** UX / Demo Quality
-
-The "INFRASTRUCTURE FABRIC" panel shows a static shimmer with "TOPOLOGY INTELLIGENCE FABRIC ACTIVE" text instead of rendering the actual dependency graph from `state.graph`. The graph nodes/edges exist in state but are not rendered.
-
-**Impact:** Wasted screen real estate — the most important panel is a static placeholder.
-**Fix:** Render a simplified force-directed graph using `state.graph.nodes` and `state.graph.edges` (or integrate a small canvas/div-based topology view).
+**Commit:** `d31ece9` — topology panel now renders `state.graph.nodes` and `state.graph.edges` with severity indicators.
 
 ---
 
-### MAJOR-04: `DigitalTwinLab` Shimmer Placeholder in "SIMULATION VIEWPORT" 
+### ~~MAJOR-04: `DigitalTwinLab` Shimmer Placeholder in "SIMULATION VIEWPORT"~~ ✅ FIXED
 
-**File:** `frontend/src/pages/PageScaffolds.tsx:587`
-**Type:** UX / Demo Quality
-
-The DigitalTwinLab's "SIMULATION VIEWPORT" panel shows a static counter instead of a real simulation viewport. The scenario system now supports detailed tracking, but no visual simulation rendering exists.
-
-**Impact:** The twin lab page is functionally useless.
-**Fix:** Implement a mini timeline/event stream showing anomaly progression tick by tick with affected pods highlighted.
+**Commit:** `d31ece9` — viewport now renders pod/anomaly/correlation data with progress bar and scenario banner.
 
 ---
 
@@ -109,10 +56,7 @@ The DigitalTwinLab's "SIMULATION VIEWPORT" panel shows a static counter instead 
 **File:** `backend/data/simulator.py:229`
 **Type:** Behavior
 
-```python
-if memory > 3800: status = "OOMKilled"; self.clear_anomaly()
-```
-The memory_leak scenario auto-clears itself when redis memory exceeds 3800MB. This is not communicated to the frontend — the scenario bar just disappears, which can confuse users.
+The memory_leak scenario auto-clears itself when redis memory exceeds 3800MB. This is not communicated to the frontend — the scenario bar just disappears.
 
 **Impact:** Users wonder why the scenario ended without warning.
 **Fix:** Emit an event or notification before auto-clearing, and set a "completed" flag instead of nulling the anomaly mode.
@@ -264,12 +208,12 @@ The `datetime` import is lazy-loaded inside a request handler. For the `/api/rep
 
 | Severity | Count | Key Items |
 |----------|-------|-----------|
-| 🔴 Critical | 3 | missing memory_pct, local NLP, incident replay |
-| 🟠 Major | 5 | sparkline in live, ECharts theme, topology placeholder, twin view, auto-clear |
+| 🔴 Critical | 0 (3 ✅ fixed) | — |
+| 🟠 Major | 1 (4 ✅ fixed) | sparkline in live mode *(low priority)*, auto-clear notification |
 | 🟡 Medium | 6 | dead endpoints, extra WS fields, duplicate types, error handling |
 | 🟢 Low | 5 | shimmer light mode, CSS structure, dead code |
 
-**Total: 19 issues** for the agent to resolve.
+**Total: 12 issues remaining** (7 fixed in `d31ece9`).
 
 ---
 

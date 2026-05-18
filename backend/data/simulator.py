@@ -190,6 +190,8 @@ class ClusterSimulator:
         progress = self.anomaly_progress()
         results = []
         t = self.tick
+        
+        clear_anomaly_after_tick = False # FIX: Flag to clear anomaly after tick
 
         for pod in PODS:
             pid = pod["id"]
@@ -226,7 +228,7 @@ class ClusterSimulator:
             elif self.anomaly_mode == "memory_leak":
                 if pid == "redis-cache":
                     memory += 15 * (t - self.anomaly_started_at) * adj_progress
-                    if memory > 3800: status = "OOMKilled"; self.clear_anomaly()
+                    if memory > 3800: status = "OOMKilled"; clear_anomaly_after_tick = True # FIX: Set flag instead of calling directly
                 elif pid == "auth-service":
                     latency += 60 * max(0, adj_progress - 0.4)
 
@@ -306,8 +308,14 @@ class ClusterSimulator:
                 "latency_ms": round(max(1.0, latency), 1),
                 "is_simulated": True, "is_digital_twin": True, 
                 "timestamp": round(time.time(), 3), "tick": t,
+                "anomaly_mode": self.anomaly_mode, # FIX: Added missing anomaly_mode
             }
             results.append(metric)
+
+        # FIX: Clear anomaly after the loop completes if flagged
+        if clear_anomaly_after_tick:
+            self.clear_anomaly()
+
         return results
 
     async def get_dependency_graph(self, namespace: Optional[str] = None) -> Dict:

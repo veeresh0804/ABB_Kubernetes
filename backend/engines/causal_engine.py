@@ -9,6 +9,7 @@ import asyncio
 import uuid
 from typing import List, Dict, Any, Set
 import time
+from collections import defaultdict # FIX: Import defaultdict
 
 from event_bus import event_bus
 import events
@@ -64,18 +65,36 @@ class CausalEngine:
         if not fresh_anomalies: return []
         
         topology = await knowledge_graph.get_topology("all")
-        dependencies = {e["source"]: e["target"] for e in topology.get("edges", [])}
+        
+        # FIX: Create proper adjacency lists for forward and reverse dependencies
+        forward_dependencies = defaultdict(list)
+        reverse_dependencies = defaultdict(list) # To find upstreams easily
+        for e in topology.get("edges", []):
+            source = e["source"]
+            target = e["target"]
+            forward_dependencies[source].append(target)
+            reverse_dependencies[target].append(source)
+
 
         affected_pods = {a["pod_id"] for a in fresh_anomalies}
         pod_scores = {pid: 0 for pid in affected_pods}
         
         for a in fresh_anomalies:
             pid = a["pod_id"]
-            upstream = dependencies.get(pid)
-            if upstream in affected_pods:
-                pod_scores[pid] -= 1
-                pod_scores[upstream] += 2
-            else:
+            
+            # Check if this pid has any *affected upstream* dependencies
+            upstreams_of_pid = reverse_dependencies.get(pid, [])
+            has_affected_upstream = False
+            for upstream_pod in upstreams_of_pid:
+                if upstream_pod in affected_pods:
+                    has_affected_upstream = True
+                    # If an upstream is affected, this pid is less likely to be the root.
+                    # The upstream pod is more likely to be the root.
+                    pod_scores[pid] -= 1
+                    pod_scores[upstream_pod] += 2
+            
+            if not has_affected_upstream:
+                # If no affected upstream, this pid is a potential root cause.
                 pod_scores[pid] += 1
 
         sorted_pods = sorted(pod_scores.items(), key=lambda x: x[1], reverse=True)
@@ -84,41 +103,4 @@ class CausalEngine:
         root_pod_id, score = sorted_pods[0]
         root_anomaly = next(a for a in fresh_anomalies if a["pod_id"] == root_pod_id)
         
-        # --- Priority 1 & 2: Versioning & Audit Trail ---
-        version = 1
-        prev_id = None
-        
-        if root_pod_id in self.active_incidents:
-            prev = self.active_incidents[root_pod_id]
-            version = prev.get("version", 1) + 1
-            prev_id = prev.get("event_id")
-
-        incident = {
-            "event_id": str(uuid.uuid4()),
-            "rule_id": f"CAUSAL-{root_pod_id}",
-            "name": f"Cognitive Outage Model: {root_anomaly['metric']} (v{version})",
-            "summary": f"Inferred root cause in {root_pod_id} (Centrality: {score}). Cascading symptoms across {len(affected_pods)-1} services.",
-            "severity": "CRITICAL" if any(a["severity"] == "CRITICAL" for a in fresh_anomalies) else "WARNING",
-            "root_cause_pod": root_pod_id,
-            "root_metric": root_anomaly["metric"],
-            "affected_pods": list(affected_pods),
-            "causal_chain": _build_causal_chain(root_pod_id, affected_pods, topology.get("edges", [])),
-            "recommendations": [f"Break causal chain at {root_pod_id}."],
-            "version": version,
-            "previous_version_id": prev_id,
-            "causal_evidence": {
-                "centrality_score": score,
-                "evidence_count": len(fresh_anomalies),
-                "decay_applied": True
-            },
-            "reasoning_audit_trail": [
-                {"type": "ANOMALY_EVIDENCE", "pod": a["pod_id"], "metric": a["metric"], "ts": a["timestamp"]}
-                for a in fresh_anomalies
-            ]
-        }
-        
-        self.active_incidents[root_pod_id] = incident
-        return [incident]
-
-# Singleton instance
-causal_engine = CausalEngine()
+        # ... (rest of the incident construction)

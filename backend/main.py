@@ -89,9 +89,18 @@ async def telemetry_worker():
     while True:
         try:
             all_metrics = await simulator.get_metrics(namespace="all")
-            if all_metrics:
-                await event_bus.publish("TelemetryMetricsEvent", events.TelemetryMetricsEvent(metrics=all_metrics, namespace="all"))
-            trend_engine.update(all_metrics)
+            
+            # FIX CB-006: Enrich metrics with trend data for MemoryLeakAgent
+            enriched_metrics = []
+            for metric in all_metrics:
+                pod_id = metric["pod_id"]
+                trends = trend_engine.get_trends(pod_id)
+                metric["trends"] = trends # Add the trends dictionary to the metric
+                enriched_metrics.append(metric)
+
+            if enriched_metrics: # Publish enriched metrics
+                await event_bus.publish("TelemetryMetricsEvent", events.TelemetryMetricsEvent(metrics=enriched_metrics, namespace="all"))
+            trend_engine.update(all_metrics) # Original update, still useful for trend_engine's internal history
         except Exception as e:
             print(f"Error in telemetry_worker: {e}")
         await asyncio.sleep(2)
@@ -157,7 +166,7 @@ async def websocket_publisher_worker():
             base_payload = await state_engine.get_state()
             
             send_tasks = []
-            for ws in active_connections:
+            for ws in list(active_connections): # FIX: Iterate over a copy to prevent RuntimeError
                 namespace = connection_namespaces.get(ws, "all")
                 
                 client_payload = base_payload.copy()
@@ -305,6 +314,7 @@ async def api_forecast(namespace: Optional[str] = "all"):
 @app.get("/api/report")
 async def api_report(namespace: Optional[str] = "all"):
     import datetime
+    import html # FIX: Import html for escaping
     state = await state_engine.get_state()
     metrics = state.get("pods", []); anomalies = state.get("anomalies", [])
     corr = state.get("correlations", []); agents = state.get("agents", [])
@@ -321,33 +331,46 @@ async def api_report(namespace: Optional[str] = "all"):
 
     incident_rows = ""
     for c in corr:
-        chain = " → ".join(f"<code>{s}</code>" for s in c["causal_chain"])
-        recs  = "".join(f"<li>{r}</li>" for r in c["recommendations"][:4])
-        pods  = ", ".join(f"<code>{p}</code>" for p in c["affected_pods"])
+        # FIX: HTML-escape all correlation data
+        escaped_severity = html.escape(c['severity'])
+        escaped_name = html.escape(c['name'])
+        escaped_root_cause_pod = html.escape(c.get('root_cause_pod','unknown'))
+        escaped_summary = html.escape(c['summary'])
+        escaped_chain = " → ".join(f"<code>{html.escape(s)}</code>" for s in c["causal_chain"])
+        escaped_recs  = "".join(f"<li>{html.escape(r)}</li>" for r in c["recommendations"][:4])
+        escaped_pods  = ", ".join(f"<code>{html.escape(p)}</code>" for p in c["affected_pods"])
+        
         incident_rows += f"""
         <div class="incident">
           <div class="inc-header">
-            <span class="sev-badge sev-{c['severity'].lower()}">{c['severity']}</span>
-            <strong>{c['name']}</strong>
-            <span class="root">Root: <code>{c.get('root_cause_pod','unknown')}</code></span>
+            <span class="sev-badge sev-{escaped_severity.lower()}">{escaped_severity}</span>
+            <strong>{escaped_name}</strong>
+            <span class="root">Root: <code>{escaped_root_cause_pod}</code></span>
           </div>
-          <p class="summary">{c['summary']}</p>
+          <p class="summary">{escaped_summary}</p>
           <div class="two-col">
-            <div><h4>Causal Chain</h4><p>{chain}</p></div>
-            <div><h4>Affected Services ({len(c['affected_pods'])})</h4><p>{pods}</p></div>
+            <div><h4>Causal Chain</h4><p>{escaped_chain}</p></div>
+            <div><h4>Affected Services ({len(c['affected_pods'])})</h4><p>{escaped_pods}</p></div>
           </div>
-          <h4>Recommendations</h4><ol>{recs}</ol>
+          <h4>Recommendations</h4><ol>{escaped_recs}</ol>
         </div>"""
 
     agent_rows = ""
     for a in agents:
-        color = "#DC2626" if a["status"]=="CRITICAL" else "#D97706" if a["status"]=="WARNING" else "#16A34A"
+        # FIX: HTML-escape all agent data
+        escaped_icon = html.escape(a['icon'])
+        escaped_agent_name = html.escape(a['agent'])
+        escaped_domain = html.escape(a['domain'])
+        escaped_status = html.escape(a['status'])
+        escaped_finding = html.escape(a['finding'][:80]) + ('...' if len(a['finding']) > 80 else '')
+        
+        color = "#DC2626" if escaped_status=="CRITICAL" else "#D97706" if escaped_status=="WARNING" else "#16A34A"
         agent_rows += f"""<tr>
-          <td>{a['icon']} {a['agent']}</td>
-          <td>{a['domain']}</td>
-          <td style="color:{color};font-weight:700">{a['status']}</td>
+          <td>{escaped_icon} {escaped_agent_name}</td>
+          <td>{escaped_domain}</td>
+          <td style="color:{color};font-weight:700">{escaped_status}</td>
           <td>{int(a.get('confidence', 0)*100)}%</td>
-          <td>{a['finding'][:80]}...</td>
+          <td>{escaped_finding}</td>
         </tr>"""
 
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>KubeMind AI — Report</title>

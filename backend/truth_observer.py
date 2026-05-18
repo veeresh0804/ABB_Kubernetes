@@ -76,6 +76,7 @@ class TruthObserver:
 
         self.tasks.extend([
             asyncio.create_task(watch_predictions()),
+            asyncio.create_task(capture_metrics()),  # FIX: Added missing task
             asyncio.create_task(verify_outcomes())
         ])
 
