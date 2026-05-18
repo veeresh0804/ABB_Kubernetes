@@ -68,6 +68,13 @@
 54. [Appendix](#54-appendix)
 55. [Tech Stack Summary](#55-tech-stack-summary)
 56. [Folder Structure Documentation](#56-folder-structure-documentation)
+57. [Expanded Frontend Architecture (Phase 2+)](#57-expanded-frontend-architecture-phase-2)
+58. [Expanded Backend Architecture (Event-Driven Cognitive Pipeline)](#58-expanded-backend-architecture-event-driven-cognitive-pipeline)
+59. [New AI Agent Systems](#59-new-ai-agent-systems)
+60. [New Intelligence Engines](#60-new-intelligence-engines)
+61. [Updated Folder Structure](#61-updated-folder-structure)
+62. [Updated File Count and Metrics](#62-updated-file-count-and-metrics)
+63. [Updated Version and Classification](#63-updated-version-and-classification)
 
 ---
 
@@ -2861,8 +2868,348 @@ ABB/
 
 ---
 
-*End of Master Technical Report — KubeMind AI v1.0.0*
+## 57. Expanded Frontend Architecture (Phase 2+)
+
+### 57.1 New Page Inventory
+
+The platform has expanded from 5 to 19 page components across 18 routes, organized into cognitive domains:
+
+| Domain | Pages | Routes | Purpose |
+|--------|-------|--------|---------|
+| **Command Center** | CommandCenter, Dashboard | `/`, `/dashboard` | Executive overview, cognitive cards, real-time telemetry |
+| **Executive** | ExecutiveOps, MissionControl | `/executive`, `/mission` | Strategic risk posture, enterprise stability, cluster fabric |
+| **Cognition** | AIMesh, PredictionFabric | `/cognition/mesh`, `/cognition/prediction` | Neural mesh workspace, temporal forecasts, blast radius |
+| **Governance** | Governance | `/governance` | Trust calibration, policies, audit trails |
+| **Simulation** | DigitalTwinLab, ScenarioSimulator | `/simulation/twin`, `/simulation/scenarios` | What-if scenario builder, mitigation outcomes |
+| **Memory** | OperationalMemory, IncidentArchive | `/memory`, `/replay` | Fingerprint explorer, lineage graph, incident timeline |
+| **Intelligence** | SemanticLogs, CausalAnalytics | `/intelligence/logs`, `/intelligence/causal` | Semantic log NLP, causal inference, counterfactuals |
+| **Infrastructure** | InfrastructureFabric, NamespaceIntelligence | `/namespaces` | Topology intelligence, blast radius, cross-namespace flow |
+| **System** | CognitiveHealth, AgentLifecycle | `/system/health` | Event fabric bus, agent runtime monitor, latency cascades |
+
+### 57.2 Page Scaffold Architecture
+
+The `PageScaffolds.tsx` (721 lines) provides a shared scaffold system where each cognitive page follows a consistent pattern: `PageShell` wrapper with glassmorphism panels, `SectionCard` containers, and `PulseButton` interactive elements. All scaffold pages import from `Layout.tsx` via `useOutletContext()` for shared state access.
+
+### 57.3 New UI Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **AISideHub** | `components/AISideHub.tsx` (129 lines) | Right sidebar with ensemble reasoning feed, trust calibration, built-in chat |
+| **EventTimeline** | `components/EventTimeline.tsx` (57 lines) | Bottom footer with anomaly ticker, health/latency display |
+| **Header** | `components/Header.tsx` (74 lines) | Top bar with brand, status pills, executive metrics, theme toggle |
+| **Sidebar** | `components/Sidebar.tsx` (73 lines) | Full navigation sidebar with grouped routes |
+
+### 57.4 Updated Component Details
+
+- **Layout.tsx** (now 183 lines): Three-column layout with integrated Header, Sidebar, AISideHub, EventTimeline, ScenarioBar, and NamespaceSelector
+- **DiagnosticPanel.tsx** (119 lines): SVG confidence rings, severity-sorted agent cards, remediation action buttons
+- **OperationalStory.tsx** (now 157 lines): Enhanced with causal chain narratives, blast radius visualization, versioning, reasoning traces, stabilization options
+
+---
+
+## 58. Expanded Backend Architecture (Event-Driven Cognitive Pipeline)
+
+### 58.1 New Module Inventory
+
+The backend has evolved from a single `main.py` + 4 modules to 7 root-level modules + 4 data modules + 6 engines + 11 agent files:
+
+| Module | File | Lines | Purpose |
+|--------|------|-------|---------|
+| **Event Bus** | `event_bus.py` | 55 | Central async pub/sub decoupling layer |
+| **Event Schemas** | `events.py` | 102 | 12 Pydantic event models with governance metadata |
+| **State Engine** | `state_engine.py` | 237 | Centralized global state cache with subscription system |
+| **Knowledge Graph** | `knowledge_graph.py` | 122 | Topology intelligence with BFS blast radius |
+| **Predictor** | `predictor.py` | 140 | Multi-horizon forecasting with linear regression |
+| **Truth Observer** | `truth_observer.py` | 79 | Cognitive feedback loop for recursive learning |
+| **Agent Mesh** | `agents/mesh.py` | 142 | Event-driven agent orchestration with trust weighting |
+
+### 58.2 Event Bus Architecture
+
+The `EventBus` (`event_bus.py`) implements a singleton async pub/sub system using `asyncio.Queue` for each subscriber. Components subscribe to typed events and receive them through dedicated queues, enabling complete decoupling of the telemetry pipeline, intelligence engines, agents, and state management.
+
+```python
+class EventBus:
+    _instance = None
+    _subscribers: Dict[str, List[asyncio.Queue]] = defaultdict(list)
+
+    def subscribe(self, event_type: str) -> asyncio.Queue:
+        q = asyncio.Queue()
+        self._subscribers[event_type].append(q)
+        return q
+
+    async def publish(self, event_type: str, data: BaseEvent) -> None:
+        for q in self._subscribers.get(event_type, []):
+            await q.put(data)
+```
+
+### 58.3 Event Schema Definitions
+
+The `events.py` defines 12 Pydantic event models with shared governance metadata:
+
+| Event Type | Purpose | Key Fields |
+|-----------|---------|------------|
+| `TelemetryMetricsEvent` | Raw pod metrics | pods, health, anomaly_mode |
+| `AnomalyEvent` | Detected anomalies | anomalies, detection_metadata |
+| `CorrelationEvent` | Causal chain incidents | correlations, root_cause |
+| `CognitiveFeedbackEvent` | Learning loop | action_id, predicted_outcome, actual_outcome, trust_delta |
+| `AgentInsightEvent` | Agent diagnostic results | agent_name, status, confidence, reasoning |
+| `HealthScoreEvent` | Cluster health updates | score, status, trends |
+| `StateUpdateEvent` | State changes | state_delta, affected_components |
+| `PredictionEvent` | Forecast results | horizon, predictions, confidence_intervals |
+| `ActionEvaluation` | Remediation outcomes | action, result, side_effects |
+| `StrategyEvent` | Decision engine plans | strategy_id, steps, risk_assessment |
+
+Each event includes `event_id`, `correlation_id`, `causal_chain_id`, `ttl`, and `source` for full traceability.
+
+### 58.4 State Engine
+
+The `OperationalStateEngine` (`state_engine.py`, 237 lines) serves as a centralized cache for all operational state. It subscribes to 7 event types (telemetry, anomalies, correlations, agent insights, predictions, feedback, strategies) and provides thread-safe state access via deep copies. Key capabilities:
+
+- **Agent Trust Management**: Maintains per-agent trust scores that decay over time and adjust based on CognitiveFeedbackEvents
+- **Stabilization Strategy Tracking**: Monitors active stabilization plans and their execution status
+- **Dependency Graph Cache**: Maintains latest topology with node/edge health annotations
+
+### 58.5 Knowledge Graph
+
+The `OperationalKnowledgeGraph` (`knowledge_graph.py`, 122 lines) extends the original dependency graph with intelligent topology management:
+
+- **Dynamic Node/Edge Management**: CRUD operations for graph elements with severity tracking
+- **Stale Node Pruning**: Automatically removes nodes not seen in N ticks
+- **Namespace Filtering**: Supports scoped topology views per namespace
+- **Anomaly-Severity Propagation**: When a node is anomalous, its severity automatically propagates to connected nodes
+
+### 58.6 Predictive Intelligence Layer
+
+The `PredictiveIntelligence` (`predictor.py`, 140 lines) implements multi-horizon forecasting:
+
+- **Linear Regression on Trends**: Uses simple linear regression over the 120-sample windows to compute slopes
+- **Time-To-Failure (TTF)**: Estimates time until a metric crosses its CRITICAL threshold based on current trajectory
+- **Multi-Horizon Stability**: Classifies stability across 3 horizons:
+  - *Immediate* (next 30s): Based on current rate of change
+  - *Short-term* (next 5min): Based on trend acceleration
+  - *Long-term* (next 30min): Based on cyclical patterns
+- **Temporal Smoothing**: Exponentially weighted moving averages to reduce prediction volatility
+- **Confidence Dampening**: Confidence decreases as prediction horizon extends
+
+### 58.7 Truth Observer (Cognitive Feedback Loop)
+
+The `TruthObserver` (`truth_observer.py`, 79 lines) closes the loop between prediction and reality:
+
+1. When a prediction is made (e.g., "OOMKill in 47 minutes"), the observer monitors the actual outcome
+2. After the prediction window expires, it compares predicted vs actual state
+3. Emits `CognitiveFeedbackEvent` with `trust_delta` to adjust agent confidence scores
+4. This implements a recursive learning mechanism where agents improve over time based on real-world accuracy
+
+---
+
+## 59. New AI Agent Systems
+
+### 59.1 Log Intelligence Agent
+
+The `LogIntelligenceAgent` (`agents/log_agent.py`, 53 lines) performs semantic log analysis for pods in non-Running states:
+
+```python
+class LogIntelligenceAgent(BaseAgent):
+    name = "Log Intelligence Agent"
+    icon = "📄"
+    domain = "Semantic Log Analysis"
+
+    def analyze(self, metrics, anomalies, graph, all_agent_results):
+        for pod in metrics:
+            if pod["status"] != "Running":
+                logs = k8s_driver.fetch_pod_logs(pod["pod_name"])
+                # Linguistic pattern matching for root-cause clues
+                if "OOMKilled" in logs or "out of memory" in logs.lower():
+                    return self._result("CRITICAL", "OOMKill confirmed in logs", ...)
+                if "connection refused" in logs.lower():
+                    return self._result("WARNING", "Connection refused errors detected", ...)
+```
+
+### 59.2 Agent Mesh Orchestrator
+
+The `AgentMesh` (`agents/mesh.py`, 142 lines) replaces the legacy `run_all_agents()` with an event-driven architecture:
+
+- Agents run as background `asyncio.Task` instances subscribing to `AnomalyEvent` on the Event Bus
+- Each agent result is published as `AgentInsightEvent`
+- Agent execution is tracked with latency monitoring and health status
+- Stabilization agent subscribes to all other agent insights and publishes consolidated recommendations
+- Trust-weighting: Agent recommendations are weighted by their historical accuracy (via TruthObserver)
+
+### 59.3 Updated Agent Architecture Diagram
+
+```
+AnomalyEvent (Event Bus)
+    │
+    ├──► CPU Contention Agent ──► AgentInsightEvent
+    ├──► Memory Leak Agent ────► AgentInsightEvent
+    ├──► PVC Saturation Agent ──► AgentInsightEvent
+    ├──► Retry Storm Agent ────► AgentInsightEvent
+    ├──► Cluster SRE Supervisor ─► AgentInsightEvent
+    ├──► Dependency Impact Agent ─► AgentInsightEvent
+    ├──► Log Intelligence Agent ─► AgentInsightEvent
+    │
+    └──► Stabilization Agent (subscribes to all AgentInsightEvents)
+            └──► Consolidated StrategyEvent
+```
+
+---
+
+## 60. New Intelligence Engines
+
+### 60.1 Causal Reasoning Engine
+
+The `CausalReasoningEngine` (`engines/causal_engine.py`, 107 lines) moves beyond the correlation engine's rule-based matching to true causal inference:
+
+- **Propagation Path Discovery**: Uses the Knowledge Graph to trace dependency paths from anomalous nodes upstream to find potential root causes
+- **Incident Versioning**: Each causal analysis is versioned, enabling forensic comparison of reasoning across time
+- **Reasoning Decay**: Older causal chains are deprioritized in favor of fresher evidence
+- **Forensic Audit Trail**: Every causal analysis is logged with full evidence chain for post-mortem review
+
+```python
+class CausalReasoningEngine:
+    async def analyze(self, anomaly_event: AnomalyEvent) -> CorrelationEvent:
+        # Trace dependency paths from anomalous pods upstream
+        for anomaly in anomaly_event.anomalies:
+            upstream_path = self.knowledge_graph.trace_upstream(anomaly.pod_id)
+            for node in upstream_path:
+                if node.has_metric_anomaly():
+                    # Found a potential upstream root cause
+                    causal_chain.append({
+                        "from": node.id,
+                        "to": anomaly.pod_id,
+                        "evidence": [anomaly, node.latest_metrics],
+                        "confidence": self._compute_confidence(anomaly, node)
+                    })
+        return CorrelationEvent(correlations=causal_chain)
+```
+
+### 60.2 Operational Decision Engine
+
+The `OperationalDecisionEngine` (`engines/decision_engine.py`, 75 lines) evaluates multiple what-if stabilization actions via the Digital Twin:
+
+- **Strategy Generation**: Creates candidate strategies from agent recommendations
+- **Counterfactual Simulation**: For each strategy, simulates the likely outcome in the Digital Twin
+- **Risk Assessment**: Each strategy is scored on effectiveness, side effects, and safety
+- **StrategyEvent Publication**: The best strategy is published for approval or auto-execution
+
+---
+
+## 61. Updated Folder Structure
+
+```
+KubeMind AI/
+├── backend/                          # 🧠 AI-Native Cognitive Backend (~2,800 lines)
+│   ├── agents/                       # Agent Mesh (11 files)
+│   │   ├── base_agent.py             # Abstract base class with _result() helper
+│   │   ├── agents.py                 # Legacy orchestrator + 7 agents
+│   │   ├── mesh.py                   # Event-driven AgentMesh orchestrator (NEW)
+│   │   ├── cpu_contention_agent.py   # CPU domain diagnostics
+│   │   ├── memory_leak_agent.py      # Memory domain diagnostics
+│   │   ├── pvc_saturation_agent.py   # Storage I/O diagnostics
+│   │   ├── retry_storm_agent.py      # Network/latency diagnostics
+│   │   ├── cluster_sre_supervisor_agent.py  # Site reliability
+│   │   ├── dependency_impact_analysis_agent.py  # BFS blast radius
+│   │   ├── stabilization_recommendation_agent.py # Cross-agent synthesis
+│   │   └── log_agent.py              # Semantic log analysis (NEW)
+│   │
+│   ├── engines/                      # Intelligence Engines (6 files)
+│   │   ├── anomaly_detector.py       # Threshold + z-score detection
+│   │   ├── correlation_engine.py     # Rule-based causal correlation
+│   │   ├── trend_engine.py           # 120-sample rolling windows
+│   │   ├── nlp_engine.py             # 13-intent natural language
+│   │   ├── causal_engine.py          # Causal inference over graph (NEW)
+│   │   └── decision_engine.py        # Counterfactual strategy eval (NEW)
+│   │
+│   ├── data/                         # Data Services (4 files)
+│   │   ├── simulator.py              # Deterministic metric generator
+│   │   ├── k8s_driver.py             # Kubernetes API client
+│   │   ├── prometheus_driver.py      # Prometheus PromQL client
+│   │   └── metric_store.py           # SQLite persistence
+│   │
+│   ├── event_bus.py                  # Central async pub/sub (NEW)
+│   ├── events.py                     # 12 Pydantic event schemas (NEW)
+│   ├── knowledge_graph.py            # Topology intelligence (NEW)
+│   ├── predictor.py                  # Multi-horizon forecasting (NEW)
+│   ├── state_engine.py               # Global state aggregation (NEW)
+│   ├── truth_observer.py             # Cognitive feedback loop (NEW)
+│   └── main.py                       # FastAPI app (412 lines, refactored)
+│
+├── frontend/                         # 🖥️ Cognitive Command Center (~4,500 lines)
+│   ├── src/
+│   │   ├── pages/                    # 19 page components (5 direct + 14 scaffolded)
+│   │   │   ├── CommandCenter/        # Executive command center (NEW)
+│   │   │   ├── Cognition/            # AI Mesh, Prediction Fabric
+│   │   │   ├── Executive/            # Executive operations
+│   │   │   ├── Governance/           # Trust & governance
+│   │   │   ├── Intelligence/         # Semantic logs
+│   │   │   ├── Memory/               # Operational memory, incident archive
+│   │   │   ├── Simulation/           # Digital twin lab
+│   │   │   ├── PageScaffolds.tsx     # 14 shared page scaffolds (NEW)
+│   │   │   └── [Dashboard, Dependencies, Agents, NLPChat, IncidentReplay]
+│   │   │
+│   │   ├── components/               # 7 shared components
+│   │   │   ├── Layout.tsx            # 3-column app shell
+│   │   │   ├── Header.tsx            # Top navigation bar (NEW)
+│   │   │   ├── Sidebar.tsx           # Full nav sidebar (NEW)
+│   │   │   ├── AISideHub.tsx         # Cognitive hub sidebar (NEW)
+│   │   │   ├── EventTimeline.tsx     # Footer event stream (NEW)
+│   │   │   ├── DiagnosticPanel.tsx   # Agent card display
+│   │   │   └── OperationalStory.tsx  # Incident narrative
+│   │   │
+│   │   └── hooks/                    # 4 custom hooks
+│   │       ├── useCluster.ts         # Core data + state machine
+│   │       ├── useConnectionState.ts # 6-state connection
+│   │       ├── useTheme.ts           # Dark/light theme
+│   │       └── useEventLog.ts        # Event log persistence
+```
+
+---
+
+## 62. Updated File Count and Metrics
+
+| Category | Files | Total Lines | Growth |
+|----------|-------|-------------|--------|
+| Frontend source | 19 | ~4,500 | +5 files, +200 lines |
+| Backend source | 22 | ~2,800 | +6 files, +436 lines |
+| Configuration | 6 | ~100 | Same |
+| Documentation | 6 | ~700 | +1 file, +100 lines |
+| Scripts | 7 | ~200 | Same |
+| **Total** | **60** | **~8,300** | **+12 files, +736 lines** |
+
+---
+
+## 63. Updated Version and Classification
+
+| Field | Value |
+|-------|-------|
+| **Project Name** | KubeMind AI |
+| **Version** | 2.0.0 |
+| **Architecture** | Event-Driven Cognitive Pipeline |
+| **AI Engine** | 8 Specialized Agents via AgentMesh + 2 Intelligence Engines |
+| **Backend Modules** | 22 source files across 7 subsystems |
+| **Frontend Pages** | 19 components across 18 routes |
+| **Operating Modes** | LIVE / DEGRADED / SIMULATION (auto-transition, 6-state machine) |
+| **Cognitive Loop** | Predict → Act → Observe → Learn (TruthObserver closed loop) |
+| **Deployment** | Cross-platform, Minikube/K3s/MicroK8s, zero cloud dependency |
+
+---
+
+*End of Master Technical Report — KubeMind AI v2.0.0*
 
 *ABB Accelerator 2026 · Theme 2: Beyond Monitoring*
 
 *Industrial AI-Assisted Kubernetes Operational Intelligence Platform*
+
+---
+
+
+
+## Updated Table of Contents (New Sections)
+
+57. [Expanded Frontend Architecture (Phase 2+)](#57-expanded-frontend-architecture-phase-2)
+58. [Expanded Backend Architecture (Event-Driven Cognitive Pipeline)](#58-expanded-backend-architecture-event-driven-cognitive-pipeline)
+59. [New AI Agent Systems](#59-new-ai-agent-systems)
+60. [New Intelligence Engines](#60-new-intelligence-engines)
+61. [Updated Folder Structure](#61-updated-folder-structure)
+62. [Updated File Count and Metrics](#62-updated-file-count-and-metrics)
+63. [Updated Version and Classification](#63-updated-version-and-classification)
