@@ -16,29 +16,32 @@ function LayoutWrapper() {
   const {
     state, mode, dataSource, events, selectedNamespace,
     triggerAnomaly, nlpQuery, executeRemediation,
-    setStabilizationMode, setNamespace
+    setStabilizationMode, setNamespace,
+    simScenario, simProgress
   } = useCluster();
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <Layout
-      state={state}
-      mode={mode}
-      dataSource={dataSource}
-      events={events}
-      simulateAnomaly={triggerAnomaly}
-      executeRemediation={executeRemediation}
-      nlpQuery={nlpQuery}
-      setStabilizationMode={setStabilizationMode}
-      selectedNamespace={selectedNamespace}
-      setNamespace={setNamespace}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-    >
+      <Layout
+        state={state}
+        mode={mode}
+        dataSource={dataSource}
+        events={events}
+        simulateAnomaly={triggerAnomaly}
+        executeRemediation={executeRemediation}
+        nlpQuery={nlpQuery}
+        setStabilizationMode={setStabilizationMode}
+        selectedNamespace={selectedNamespace}
+        setNamespace={setNamespace}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        simScenario={simScenario}
+        simProgress={simProgress}
+      >
       <Routes>
         {/* COMMAND — main entry */}
         <Route path="/" element={<CommandCenter state={state} />} />
-        <Route path="/dashboard" element={<Dashboard state={state} />} />
+        <Route path="/dashboard" element={<Dashboard state={state} dataSource={dataSource} />} />
         <Route path="/executive" element={<Pages.ExecutiveOps state={state} />} />
         <Route path="/mission" element={<Pages.MissionControl state={state} />} />
 

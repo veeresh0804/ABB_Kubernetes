@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { Activity } from 'lucide-react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -20,61 +20,29 @@ interface LayoutProps {
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   children: React.ReactNode;
+  simScenario: string | null;
+  simProgress: number;
 }
 
 export const NamespaceContext = React.createContext<string>('all');
 
 export function Layout({
   state, theme, onToggleTheme, children,
-  simulateAnomaly, executeRemediation, selectedNamespace, setNamespace
+  simulateAnomaly, executeRemediation, selectedNamespace, setNamespace,
+  simScenario, simProgress
 }: LayoutProps) {
-
-  // Scenario progress bar state
-  const [scenarioProgress, setScenarioProgress] = useState(0);
-  const [activeScenario, setActiveScenario] = useState<string | null>(null);
-  const pollRef = useRef<number | undefined>(undefined);
-  const API = import.meta.env.VITE_API_URL || '';
-
-  const stopPoll = useCallback(() => {
-    if (pollRef.current !== undefined) {
-      clearInterval(pollRef.current);
-      pollRef.current = undefined;
-    }
-  }, []);
-
-  const startPoll = useCallback(() => {
-    stopPoll();
-    pollRef.current = window.setInterval(async () => {
-      try {
-        const res = await fetch(`${API}/api/simulate/status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setScenarioProgress(data.progress || 0);
-        setActiveScenario(data.anomaly_mode || null);
-        if (!data.anomaly_mode) stopPoll();
-      } catch { /* ignore */ }
-    }, 2000);
-  }, [API, stopPoll]);
 
   const handleScenario = useCallback(async (scenario: string) => {
     await simulateAnomaly(scenario);
-    setActiveScenario(scenario);
-    setScenarioProgress(0);
-    startPoll();
-  }, [simulateAnomaly, startPoll]);
+  }, [simulateAnomaly]);
 
   const handleClear = useCallback(async () => {
     await simulateAnomaly('clear');
-    setActiveScenario(null);
-    setScenarioProgress(0);
-    stopPoll();
-  }, [simulateAnomaly, stopPoll]);
+  }, [simulateAnomaly]);
 
-  useEffect(() => () => stopPoll(), [stopPoll]);
-
-  const barColor = scenarioProgress > 0.7
+  const barColor = simProgress > 0.7
     ? 'var(--km-danger)'
-    : scenarioProgress > 0.4
+    : simProgress > 0.4
     ? 'var(--km-warn)'
     : 'var(--km-healthy)';
 
@@ -92,19 +60,19 @@ export function Layout({
         <Header state={state} theme={theme} onToggleTheme={onToggleTheme} />
 
         {/* Scenario Progress Bar */}
-        {activeScenario && (
+        {simScenario && (
           <div className="scenario-bar" style={{
             height: 32, background: 'var(--km-bg)', borderBottom: '1px solid var(--km-border)',
             display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16
           }}>
             <div style={{ fontFamily: 'var(--km-mono)', fontSize: 10, fontWeight: 700, color: 'var(--km-accent)', minWidth: 160 }}>
-              ⚡ {activeScenario.replace(/_/g, ' ').toUpperCase()}
+              ⚡ {simScenario.replace(/_/g, ' ').toUpperCase()}
             </div>
             <div style={{ flex: 1, height: 4, background: 'var(--km-border)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${scenarioProgress * 100}%`, background: barColor, transition: 'width 2s linear' }} />
+              <div style={{ height: '100%', width: `${simProgress * 100}%`, background: barColor, transition: 'width 2s linear' }} />
             </div>
             <div style={{ fontFamily: 'var(--km-mono)', fontSize: 10, fontWeight: 700, color: 'var(--km-muted)', minWidth: 40 }}>
-              {Math.round(scenarioProgress * 100)}%
+              {Math.round(simProgress * 100)}%
             </div>
             <button onClick={handleClear} className="btn" style={{ height: 20, padding: '0 8px', borderColor: 'var(--km-danger)', color: 'var(--km-danger)' }}>
               CLEAR
@@ -134,19 +102,24 @@ export function Layout({
               >{ns.toUpperCase()}</button>
             ))}
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-            {['pvc_cascade', 'memory_leak', 'cpu_storm'].map((s, i) => {
-              const labels = ['PVC Cascade', 'Memory Leak', 'CPU Storm'];
-              const colors = ['var(--km-danger)', 'var(--km-warn)', 'var(--km-accent)'];
-              return (
-                <button key={s} onClick={() => handleScenario(s)} style={{
-                  fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700,
-                  padding: '2px 10px', borderRadius: 3, border: `1px solid ${colors[i]}`,
-                  background: 'transparent', color: colors[i], cursor: 'pointer',
-                  opacity: activeScenario === s ? 1 : 0.7, transition: 'opacity 0.2s',
-                }}>⚡ {labels[i]}</button>
-              );
-            })}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[
+              { key: 'pvc_cascade', label: 'PVC Cascade', color: 'var(--km-danger)' },
+              { key: 'memory_leak', label: 'Mem Leak', color: 'var(--km-warn)' },
+              { key: 'cpu_storm', label: 'CPU Storm', color: 'var(--km-accent)' },
+              { key: 'network_partition', label: 'Net Partition', color: 'var(--km-danger)' },
+              { key: 'node_failure', label: 'Node Fail', color: 'var(--km-danger)' },
+              { key: 'cert_expiry', label: 'Cert Expiry', color: 'var(--km-warn)' },
+              { key: 'config_drift', label: 'Config Drift', color: 'var(--km-warn)' },
+              { key: 'dns_failure', label: 'DNS Fail', color: 'var(--km-accent)' },
+            ].map(s => (
+              <button key={s.key} onClick={() => handleScenario(s.key)} style={{
+                fontFamily: 'var(--km-mono)', fontSize: 9, fontWeight: 700,
+                padding: '2px 8px', borderRadius: 3, border: `1px solid ${s.color}`,
+                background: 'transparent', color: s.color, cursor: 'pointer',
+                opacity: simScenario === s.key ? 1 : 0.65, transition: 'opacity 0.2s',
+              }}>⚡ {s.label}</button>
+            ))}
           </div>
         </div>
 

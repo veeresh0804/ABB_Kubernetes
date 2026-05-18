@@ -235,6 +235,58 @@ class ClusterSimulator:
                     cpu += 65 * adj_progress; latency += 75 * adj_progress
                 elif pid == "frontend-service":
                     latency += 110 * max(0, adj_progress - 0.35)
+
+            elif self.anomaly_mode == "network_partition":
+                if pid == "auth-service":
+                    latency += 300 * adj_progress; cpu += 40 * adj_progress; net_in += 0.5 * adj_progress; net_out += 0.3 * adj_progress
+                    if adj_progress > 0.7: status = "CrashLoopBackOff"
+                    restarts = int(adj_progress * 3)
+                elif pid == "frontend-service":
+                    latency += 250 * adj_progress; cpu += 35 * adj_progress
+                elif pid == "payment-service":
+                    latency += 100 * adj_progress; cpu += 20 * adj_progress
+
+            elif self.anomaly_mode == "node_failure":
+                if pid in ("payment-service", "redis-cache"):
+                    if adj_progress > 0.3: status = "NodeLost"; cpu = 0; memory = 0; latency = 999
+                    restarts = int(adj_progress * 4) if adj_progress > 0.5 else restarts
+                elif pid == "frontend-service":
+                    latency += 180 * adj_progress; cpu += 25 * adj_progress
+
+            elif self.anomaly_mode == "cert_expiry":
+                if pid == "frontend-service":
+                    if adj_progress > 0.6: status = "CrashLoopBackOff"
+                    latency += 150 * adj_progress; cpu += 30 * adj_progress
+                    restarts = int(adj_progress * 2) if adj_progress > 0.4 else restarts
+                elif pid == "auth-service":
+                    latency += 40 * adj_progress; cpu += 10 * adj_progress
+
+            elif self.anomaly_mode == "config_drift":
+                if pid == "postgres-db":
+                    latency += 200 * adj_progress; cpu += 45 * adj_progress; pvc_w += 3.0 * adj_progress
+                    if adj_progress > 0.85: status = "CrashLoopBackOff"
+                elif pid == "auth-service":
+                    latency += 90 * adj_progress; cpu += 15 * adj_progress; restarts = int(adj_progress * 2) if adj_progress > 0.6 else restarts
+                elif pid == "payment-service":
+                    latency += 50 * adj_progress; cpu += 10 * adj_progress
+
+            elif self.anomaly_mode == "dns_failure":
+                if pid == "auth-service":
+                    latency += 200 * adj_progress; cpu += 30 * adj_progress
+                    if adj_progress > 0.8: status = "CrashLoopBackOff"
+                    restarts = int(adj_progress * 3) if adj_progress > 0.5 else restarts
+                elif pid == "frontend-service":
+                    latency += 150 * adj_progress; cpu += 25 * adj_progress
+                elif pid == "redis-cache":
+                    latency += 20 * adj_progress; cpu += 10 * adj_progress
+
+            elif self.anomaly_mode == "deployment_failure":
+                if pid == "payment-service":
+                    cpu += 55 * adj_progress; latency += 120 * adj_progress
+                    if adj_progress > 0.5: status = "CrashLoopBackOff"
+                    restarts = int(adj_progress * 5)
+                elif pid == "frontend-service":
+                    latency += 80 * max(0, adj_progress - 0.2); cpu += 15 * adj_progress
             
             # Replicate restarts for twin realism
             if status in ("CrashLoopBackOff", "OOMKilled"): self.restarts[pid] += 1

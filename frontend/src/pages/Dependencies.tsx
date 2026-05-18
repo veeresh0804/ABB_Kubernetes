@@ -24,7 +24,7 @@ export function Dependencies({ state }: { state: ClusterState }) {
       label: {
         show: true,
         formatter: (p: any) => `${p.name}\n${(p.data?.cpu ?? 0).toFixed(0)}% CPU`,
-        color: '#475569', fontSize: 9,
+        color: 'var(--km-secondary)', fontSize: 9,
         fontFamily: 'JetBrains Mono, monospace',
       },
     }));
