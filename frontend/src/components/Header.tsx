@@ -4,7 +4,7 @@ import {
   Terminal, Globe, ShieldCheck, Clock, Settings,
   ChevronDown, User, Layers
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+
 import type { ClusterState } from '../hooks/useCluster';
 
 interface HeaderProps {

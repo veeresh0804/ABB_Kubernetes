@@ -1,6 +1,6 @@
 import React from 'react';
 import { Wifi, Activity, AlertCircle, Clock, ShieldCheck, Zap } from 'lucide-react';
-import { motion } from 'framer-motion';
+
 import type { Anomaly } from '../hooks/useCluster';
 
 interface EventTimelineProps {

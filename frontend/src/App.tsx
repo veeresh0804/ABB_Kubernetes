@@ -4,22 +4,19 @@ import { useCluster } from './hooks/useCluster';
 import { useTheme } from './hooks/useTheme';
 import { Layout } from './components/Layout';
 import { CommandCenter } from './pages/CommandCenter/CommandCenter';
-import { AIMesh } from './pages/Cognition/AIMesh';
-import { PredictionFabric } from './pages/Cognition/PredictionFabric';
-import { DigitalTwinLab } from './pages/Simulation/DigitalTwinLab';
-import { OperationalMemory } from './pages/Memory/OperationalMemory';
-import { SemanticLogs } from './pages/Intelligence/SemanticLogs';
-import { Governance } from './pages/Governance/Governance';
-import { ExecutiveOps } from './pages/Executive/ExecutiveOps';
-import { IncidentArchive } from './pages/Memory/IncidentArchive';
+import { Dashboard } from './pages/Dashboard';
+import { Agents } from './pages/Agents';
+import { Dependencies } from './pages/Dependencies';
+import { NLPChat } from './pages/NLPChat';
+import { IncidentReplay } from './pages/IncidentReplay';
 import * as Pages from './pages/PageScaffolds';
 import './index.css';
 
 function LayoutWrapper() {
-  const { 
-    state, mode, dataSource, events, selectedNamespace, 
-    triggerAnomaly, nlpQuery, executeRemediation, 
-    setStabilizationMode, setNamespace 
+  const {
+    state, mode, dataSource, events, selectedNamespace,
+    triggerAnomaly, nlpQuery, executeRemediation,
+    setStabilizationMode, setNamespace
   } = useCluster();
   const { theme, toggleTheme } = useTheme();
 
@@ -39,40 +36,43 @@ function LayoutWrapper() {
       onToggleTheme={toggleTheme}
     >
       <Routes>
-        {/* COMMAND */}
+        {/* COMMAND — main entry */}
         <Route path="/" element={<CommandCenter state={state} />} />
-        <Route path="/executive" element={<ExecutiveOps state={state} />} />
-        <Route path="/mission" element={<Pages.MissionControl />} />
+        <Route path="/dashboard" element={<Dashboard state={state} />} />
+        <Route path="/executive" element={<Pages.ExecutiveOps state={state} />} />
+        <Route path="/mission" element={<Pages.MissionControl state={state} />} />
 
         {/* COGNITION */}
-        <Route path="/cognition/mesh" element={<AIMesh state={state} />} />
-        <Route path="/cognition/prediction" element={<PredictionFabric state={state} />} />
-        <Route path="/governance" element={<Governance state={state} />} />
+        <Route path="/cognition/mesh" element={<Pages.AIMesh state={state} />} />
+        <Route path="/cognition/prediction" element={<Pages.PredictionFabric state={state} />} />
+        <Route path="/governance" element={<Pages.Governance state={state} />} />
 
         {/* INFRASTRUCTURE */}
-        <Route path="/dependencies" element={<Pages.InfrastructureFabric state={state} />} />
-        <Route path="/namespaces" element={<Pages.NamespaceIntelligence />} />
+        <Route path="/dependencies" element={<Dependencies state={state} />} />
+        <Route path="/namespaces" element={<Pages.NamespaceIntelligence state={state} />} />
 
         {/* SIMULATION */}
-        <Route path="/simulation/twin" element={<DigitalTwinLab state={state} />} />
-        <Route path="/simulation/scenarios" element={<Pages.ScenarioSimulator />} />
+        <Route path="/simulation/twin" element={<Pages.DigitalTwinLab state={state} />} />
+        <Route path="/simulation/scenarios" element={<Pages.ScenarioSimulator state={state} />} />
 
         {/* MEMORY */}
-        <Route path="/memory" element={<OperationalMemory state={state} />} />
-        <Route path="/replay" element={<IncidentArchive state={state} />} />
+        <Route path="/memory" element={<Pages.OperationalMemory state={state} />} />
+        <Route path="/replay" element={<IncidentReplay state={state} />} />
 
         {/* INTELLIGENCE */}
-        <Route path="/intelligence/logs" element={<SemanticLogs state={state} />} />
-        <Route path="/intelligence/causal" element={<Pages.CausalAnalytics />} />
+        <Route path="/intelligence/logs" element={<Pages.SemanticLogs state={state} />} />
+        <Route path="/intelligence/causal" element={<Pages.CausalAnalytics state={state} />} />
 
         {/* SYSTEM */}
-        <Route path="/system/health" element={<Pages.CognitiveHealth />} />
-        <Route path="/agents" element={<Pages.AgentLifecycle />} />
+        <Route path="/system/health" element={<Pages.CognitiveHealth state={state} />} />
+        <Route path="/agents" element={<Agents state={state} executeRemediation={executeRemediation} />} />
+
+        {/* NLP */}
+        <Route path="/nlp" element={<NLPChat nlpQuery={nlpQuery} />} />
       </Routes>
     </Layout>
   );
 }
-
 
 export default function App() {
   return (
