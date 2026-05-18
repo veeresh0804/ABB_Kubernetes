@@ -3,6 +3,14 @@ import { Send, MessageSquare } from 'lucide-react';
 
 interface Message { role: 'user' | 'ai'; text: string; }
 
+function sanitize(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\bon\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\bon\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
 const QUICK = [
   "How are pods connected in production?",
   "Generate incident report",
@@ -29,7 +37,7 @@ export function NLPChat({ nlpQuery }: { nlpQuery: (q: string) => Promise<any> })
       const md = (res.answer || '')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\n/g, '<br/>');
-      setMessages(m => [...m, { role: 'ai', text: md }]);
+      setMessages(m => [...m, { role: 'ai', text: sanitize(md) }]);
     } catch {
       setMessages(m => [...m, { role: 'ai', text: '⚠ Could not reach backend. Ensure the FastAPI server is running on port 8000.' }]);
     }

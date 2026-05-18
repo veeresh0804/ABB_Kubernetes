@@ -15,14 +15,16 @@ from contextlib import asynccontextmanager
 
 # Internal modules
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+_backend_dir = os.path.dirname(__file__)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 
 from data.simulator import simulator
 from data.k8s_driver import kube_driver
 from data.prometheus_driver import prometheus_driver
 from data.metric_store import metric_store
 from engines.anomaly_detector import detect
-from engines.correlation_engine import correlate
+# from engines.correlation_engine import correlate  # Retained for reference; runtime uses causal_engine
 from engines.nlp_engine import process as nlp_process
 from engines.trend_engine import trend_engine
 
@@ -133,6 +135,7 @@ async def correlation_worker():
                         correlation=inc,
                         causal_evidence=inc.get("causal_evidence")
                     ))
+                    _append_incident({**inc, "logged_at": time.time()})
                 
                 anomalies_buffer = [] 
                 last_correlation_time = now
@@ -196,8 +199,15 @@ app.add_middleware(
 # ─── Connection State ──────────────────────────────────────────────────────────
 active_connections: Set[WebSocket] = set()
 connection_namespaces: Dict[WebSocket, str] = {}
+MAX_INCIDENT_LOG = 300
 incident_log: List[dict] = []
-stabilization_mode: str = "RECOMMEND" 
+stabilization_mode: str = "RECOMMEND"
+
+
+def _append_incident(entry: dict) -> None:
+    incident_log.append(entry)
+    if len(incident_log) > MAX_INCIDENT_LOG:
+        incident_log[:] = incident_log[-MAX_INCIDENT_LOG:] 
 last_stabilization: Dict[str, float] = {} # pod_id -> timestamp
 
 # ─── WebSocket Manager ────────────────────────────────────────────────────────

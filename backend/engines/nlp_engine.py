@@ -1,9 +1,13 @@
 """
 NLP Engine — keyword-routing natural language query processor.
 Maps user questions to context-aware AI responses using current cluster state.
+Falls back to Ollama REST API for unmatched queries.
 """
+import json
 import re
 import time
+import urllib.request
+import urllib.error
 from typing import Dict, Any, List
 
 
@@ -23,6 +27,33 @@ def _health_score(metrics: List[Dict]) -> int:
         if m.get("latency_ms", 0) > 100:
             score -= 8
     return max(0, score)
+
+
+def _ollama_query(question: str, context: str) -> str:
+    """Query local Ollama REST API for LLM-powered responses."""
+    prompt = (
+        "You are KubeMind AI, a Kubernetes cluster intelligence assistant. "
+        "Answer concisely using the provided context.\n\n"
+        f"Context:\n{context}\n\n"
+        f"Question: {question}\nAnswer:"
+    )
+    payload = json.dumps({
+        "model": "llama3.2:1b",
+        "prompt": prompt,
+        "stream": False,
+        "options": {"num_predict": 256},
+    }).encode()
+    try:
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("response", "").strip()
+    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        return ""
 
 
 def process(
@@ -477,6 +508,20 @@ def _answer_industrial(q, metrics, anomalies):
 
 def _answer_generic(q, metrics, anomalies, correlations):
     score = _health_score(metrics)
+    context = (
+        f"Cluster health: {score}/100. "
+        f"Active pods: {len(metrics)}. "
+        f"Anomalies: {len(anomalies)}. "
+        f"Causal incidents: {len(correlations)}."
+    )
+    ollama_response = _ollama_query(q, context)
+    if ollama_response:
+        return {
+            "answer": ollama_response,
+            "sources": ["ollama-llm", "cluster-wide"],
+            "severity": "INFO",
+            "confidence": 0.80,
+        }
     return {
         "answer": (
             f"I analyzed your query against current cluster state. "

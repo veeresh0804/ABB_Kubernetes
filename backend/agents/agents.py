@@ -11,6 +11,7 @@ from .retry_storm_agent import RetryStormAgent
 from .cluster_sre_supervisor_agent import ClusterSRESupervisorAgent
 from .dependency_impact_analysis_agent import DependencyImpactAnalysisAgent
 from .stabilization_recommendation_agent import StabilizationRecommendationAgent
+from .log_agent import LogIntelligenceAgent
 
 # ─── Agent Registry ───────────────────────────────────────────────────────────
 ALL_AGENTS = [
@@ -21,6 +22,7 @@ ALL_AGENTS = [
     ClusterSRESupervisorAgent(),
     DependencyImpactAnalysisAgent(),
     StabilizationRecommendationAgent(),
+    LogIntelligenceAgent(),
 ]
 
 

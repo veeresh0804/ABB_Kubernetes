@@ -14,6 +14,25 @@ from event_bus import event_bus
 import events
 from knowledge_graph import knowledge_graph
 
+def _build_causal_chain(root: str, affected: Set[str], edges: List[Dict]) -> List[str]:
+    chain = [root]
+    visited = {root}
+    queue = [root]
+    while queue:
+        current = queue.pop(0)
+        children = [
+            e["target"] for e in edges
+            if e.get("source") == current and e["target"] in affected and e["target"] not in visited
+        ]
+        for child in children:
+            if child not in visited:
+                visited.add(child)
+                queue.append(child)
+                chain.append(child)
+    remaining = [p for p in affected if p not in visited]
+    chain.extend(sorted(remaining))
+    return chain
+
 class CausalEngine:
     def __init__(self):
         self.running = False
@@ -83,7 +102,7 @@ class CausalEngine:
             "root_cause_pod": root_pod_id,
             "root_metric": root_anomaly["metric"],
             "affected_pods": list(affected_pods),
-            "causal_chain": [root_pod_id] + [p for p in affected_pods if p != root_pod_id],
+            "causal_chain": _build_causal_chain(root_pod_id, affected_pods, topology.get("edges", [])),
             "recommendations": [f"Break causal chain at {root_pod_id}."],
             "version": version,
             "previous_version_id": prev_id,
@@ -100,8 +119,6 @@ class CausalEngine:
         
         self.active_incidents[root_pod_id] = incident
         return [incident]
-
-# uuid import moved to top of file
 
 # Singleton instance
 causal_engine = CausalEngine()

@@ -1,11 +1,13 @@
 @echo off
+cd /d "%~dp0.." || exit /b 1
+if not exist ".env" copy ".env.example" ".env" >nul 2>&1
 echo ╔══════════════════════════════════════════════╗
 echo ║         KubeMind AI — Demo Launcher          ║
 echo ║      Kubernetes Operations Intelligence       ║
 ╚══════════════════════════════════════════════╝
 echo.
 echo [1/4] Installing backend dependencies...
-cd /d "%~dp0..\backend"
+cd backend
 pip install -r requirements.txt -q
 if %errorlevel% neq 0 (
     echo [ERROR] Backend dependency installation failed.

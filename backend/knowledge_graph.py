@@ -11,6 +11,7 @@ import time
 
 from event_bus import event_bus
 import events
+from data.simulator import DEPENDENCY_EDGES
 
 class KnowledgeGraph:
     def __init__(self):
@@ -72,9 +73,6 @@ class KnowledgeGraph:
                     }
                 }
             
-            # Temporary: Sync with simulator's static edges if they aren't discovered yet
-            # In a full system, this would come from a dedicated discovery event.
-            from data.simulator import DEPENDENCY_EDGES
             self.edges = []
             for e in DEPENDENCY_EDGES:
                 # Only add edges if both nodes exist in our current knowledge

@@ -2,6 +2,7 @@
 set -e
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ ! -f "$DIR/.env" ]; then cp "$DIR/.env.example" "$DIR/.env"; fi
 
 echo "╔══════════════════════════════════════════════╗"
 echo "║         KubeMind AI — Demo Launcher          ║"

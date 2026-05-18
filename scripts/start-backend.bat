@@ -1,5 +1,7 @@
 @echo off
-cd /d "%~dp0..\backend"
+cd /d "%~dp0.." || exit /b 1
+if not exist ".env" copy ".env.example" ".env" >nul 2>&1
+cd backend
 echo [KubeMind AI] Starting backend...
 echo [KubeMind AI] Installing Python dependencies...
 pip install -r requirements.txt -q
